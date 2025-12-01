@@ -3,120 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Messenger - Nafisa & Jahongir</title>
-    <style>
-        /* Inline minimal CSS while loading */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        
-        .loading {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            color: white;
-            font-size: 20px;
-        }
-    </style>
+    <title>Messenger - 2 Kishilik</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <div id="app">
-        <!-- Login sahifasi -->
-        <div class="login-screen" id="login-screen">
-            <div class="login-container">
-                <div class="logo">
-                    <i class="fas fa-comment-dots"></i>
-                    <h1>Messenger</h1>
+    <!-- Login sahifasi -->
+    <div class="container" id="login-container">
+        <div class="login-box">
+            <div class="login-header">
+                <h1><i class="fas fa-comment"></i> Messenger</h1>
+                <p>Nafisa va Jahongir uchun chat</p>
+            </div>
+            
+            <div class="login-form">
+                <div class="form-group">
+                    <input type="text" id="username" placeholder="Login" autocomplete="username">
                 </div>
                 
-                <div class="login-form">
-                    <input type="text" id="username" placeholder="Login" autocomplete="username">
+                <div class="form-group">
                     <input type="password" id="password" placeholder="Parol" autocomplete="current-password">
-                    
-                    <div class="remember-me">
-                        <input type="checkbox" id="remember-me" checked>
-                        <label for="remember-me">Eslab qolish</label>
-                    </div>
-                    
-                    <button id="login-btn" class="btn-primary">
-                        <i class="fas fa-sign-in-alt"></i> Kirish
-                    </button>
-                    
-                    <div class="login-hint">
-                        <p><strong>Foydalanuvchilar:</strong></p>
-                        <div class="user-cred">
-                            <span class="user-name">Nafisa</span>
-                            <span class="user-cred-text">nafisa_177 / nafisa2010</span>
-                        </div>
-                        <div class="user-cred">
-                            <span class="user-name">Jahongir</span>
-                            <span class="user-cred-text">jahongir_177 / jahongir2010</span>
-                        </div>
-                    </div>
                 </div>
+                
+                <div class="form-group checkbox">
+                    <input type="checkbox" id="remember-me" checked>
+                    <label for="remember-me">Eslab qolish</label>
+                </div>
+                
+                <button id="login-btn" class="btn-login">Kirish</button>
             </div>
         </div>
-        
-        <!-- Chat sahifasi -->
-        <div class="chat-screen" id="chat-screen" style="display: none;">
-            <div class="chat-container">
-                <!-- Header -->
-                <header class="chat-header">
-                    <div class="header-left">
-                        <div class="chat-info">
-                            <i class="fas fa-comments"></i>
-                            <div>
-                                <h2>Ikki Kishi Chat</h2>
-                                <p id="status-info" class="status-text">Yuklanmoqda...</p>
-                            </div>
+    </div>
+    
+    <!-- Chat sahifasi -->
+    <div class="container" id="chat-container" style="display: none;">
+        <div class="chat-app">
+            <!-- Header -->
+            <div class="chat-header">
+                <div class="header-info">
+                    <div class="chat-icon">
+                        <i class="fas fa-comment"></i>
+                    </div>
+                    <div class="chat-title">
+                        <h2>Messenger</h2>
+                        <div id="status-info">
+                            <span id="other-user-status">...</span>
                         </div>
                     </div>
-                    
-                    <div class="header-right">
-                        <div class="user-profile">
-                            <div class="user-avatar" id="user-avatar">U</div>
-                            <div class="user-details">
-                                <span id="current-user-name">User</span>
-                                <button id="logout-btn" class="btn-logout" title="Chiqish">
-                                    <i class="fas fa-sign-out-alt"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </header>
+                </div>
                 
-                <!-- Messages -->
-                <main class="messages-container" id="messages-container">
-                    <div class="welcome-message">
-                        <div class="welcome-icon">
-                            <i class="fas fa-comment-slash"></i>
-                        </div>
-                        <h3>Hozircha xabarlar yo'q</h3>
-                        <p>Biror narsa yozishni boshlang!</p>
+                <div class="user-info">
+                    <div class="user-avatar" id="current-user-avatar">
+                        <i class="fas fa-user"></i>
                     </div>
-                </main>
-                
-                <!-- Message input -->
-                <footer class="message-input">
-                    <div class="input-wrapper">
-                        <input type="text" id="message-input" placeholder="Xabar yozing..." autocomplete="off">
-                        <button id="send-btn" class="btn-send">
-                            <i class="fas fa-paper-plane"></i>
-                        </button>
-                    </div>
-                    <p class="input-hint">Enter tugmasi bilan yuborishingiz mumkin</p>
-                </footer>
+                    <div class="user-name" id="current-user-name"></div>
+                    <button id="logout-btn" title="Chiqish">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Xabarlar -->
+            <div class="messages-container" id="messages-container">
+                <div class="welcome-message">
+                    <h3>Xush kelibsiz!</h3>
+                    <p>Xabarlar bu yerda ko'rinadi...</p>
+                </div>
+            </div>
+            
+            <!-- Xabar yuborish -->
+            <div class="message-input-area">
+                <div class="input-container">
+                    <input type="text" id="message-input" placeholder="Xabar yozing...">
+                    <button id="send-btn" class="btn-send">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

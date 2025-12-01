@@ -1,447 +1,433 @@
-// Global variables
-let currentUser = null;
-let currentToken = null;
-let messageCheckInterval = null;
-let userCheckInterval = null;
-let lastMessageId = 0;
-
-// Auto login on page load
 document.addEventListener('DOMContentLoaded', function() {
-    autoLogin();
-    setupEventListeners();
-});
-
-// Auto login function
-async function autoLogin() {
-    const token = localStorage.getItem('messenger_token');
-    const user = localStorage.getItem('messenger_user');
+    // DOM elementlari
+    const loginContainer = document.getElementById('login-container');
+    const chatContainer = document.getElementById('chat-container');
+    const loginBtn = document.getElementById('login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const messageInput = document.getElementById('message-input');
+    const sendBtn = document.getElementById('send-btn');
+    const messagesContainer = document.getElementById('messages-container');
+    const currentUserName = document.getElementById('current-user-name');
+    const currentUserAvatar = document.getElementById('current-user-avatar');
+    const otherUserStatus = document.getElementById('other-user-status');
+    const rememberMe = document.getElementById('remember-me');
     
-    if (token && user) {
+    // Global o'zgaruvchilar
+    let currentUser = null;
+    let currentToken = null;
+    let otherUser = null;
+    let messageCheckInterval = null;
+    let userCheckInterval = null;
+    let lastMessageId = 0;
+    
+    // Sahifa yuklanganda avtomatik login
+    autoLogin();
+    
+    // Avtomatik login funksiyasi
+    async function autoLogin() {
+        const savedToken = localStorage.getItem('messenger_token');
+        const savedUser = localStorage.getItem('messenger_user');
+        
+        if (savedToken && savedUser) {
+            try {
+                // Tokenni tekshirish
+                const response = await fetch('/api/verify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ token: savedToken })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.valid) {
+                        // Token yaroqli, avtomatik login
+                        const user = JSON.parse(savedUser);
+                        await loginWithToken(user, savedToken);
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.log('Token tekshirishda xato:', error);
+            }
+        }
+        
+        // Agar token saqlanmagan bo'lsa yoki yaroqsiz bo'lsa
+        showLoginPage();
+    }
+    
+    // Token bilan login qilish
+    async function loginWithToken(user, token) {
+        currentUser = user;
+        currentToken = token;
+        
+        // Boshqa foydalanuvchini aniqlash
+        otherUser = currentUser.id === 1 ? 
+            { id: 2, name: 'Jahongir', username: 'jahongir_177' } : 
+            { id: 1, name: 'Nafisa', username: 'nafisa_177' };
+        
+        // Online statusni yangilash
+        await updateOnlineStatus(true);
+        
+        showChatPage();
+        
+        // Xabarlarni yuklash
+        loadMessages();
+        
+        // Foydalanuvchilar holatini yuklash
+        loadUsers();
+    }
+    
+    // Online statusni yangilash
+    async function updateOnlineStatus(online) {
         try {
-            const response = await fetch('/api/verify', {
+            await fetch('/api/users', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ token })
-            });
-            
-            const data = await response.json();
-            if (data.valid) {
-                await loginWithToken(JSON.parse(user), token);
-                return;
-            }
-        } catch (error) {
-            console.log('Auto login failed:', error);
-        }
-    }
-    
-    showLoginScreen();
-}
-
-// Login with token
-async function loginWithToken(user, token) {
-    currentUser = user;
-    currentToken = token;
-    
-    // Update online status
-    try {
-        await fetch('/api/users', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.id, online: true })
-        });
-    } catch (error) {
-        console.log('Status update failed');
-    }
-    
-    showChatScreen();
-    loadMessages();
-    loadUsers();
-    
-    // Start intervals
-    startIntervals();
-}
-
-// Setup event listeners
-function setupEventListeners() {
-    // Login button
-    document.getElementById('login-btn').addEventListener('click', handleLogin);
-    
-    // Logout button
-    document.getElementById('logout-btn').addEventListener('click', handleLogout);
-    
-    // Send button
-    document.getElementById('send-btn').addEventListener('click', sendMessage);
-    
-    // Enter key for login
-    document.getElementById('password').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            handleLogin();
-        }
-    });
-    
-    // Enter key for sending messages
-    document.getElementById('message-input').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            sendMessage();
-        }
-    });
-}
-
-// Handle login
-async function handleLogin() {
-    const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value.trim();
-    const rememberMe = document.getElementById('remember-me').checked;
-    
-    if (!username || !password) {
-        alert('Iltimos, login va parolni kiriting!');
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ username, password })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            currentUser = data.user;
-            currentToken = data.token;
-            
-            if (rememberMe) {
-                localStorage.setItem('messenger_token', currentToken);
-                localStorage.setItem('messenger_user', JSON.stringify(currentUser));
-            }
-            
-            // Update online status
-            try {
-                await fetch('/api/users', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: currentUser.id, online: true })
-                });
-            } catch (error) {
-                console.log('Status update failed');
-            }
-            
-            showChatScreen();
-            loadMessages();
-            loadUsers();
-            
-            // Start intervals
-            startIntervals();
-        } else {
-            alert('Login yoki parol noto\'g\'ri!');
-        }
-    } catch (error) {
-        console.error('Login error:', error);
-        alert('Server bilan aloqa xatosi!');
-    }
-}
-
-// Handle logout
-async function handleLogout() {
-    // Update online status
-    try {
-        await fetch('/api/users', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser.id, online: false })
-        });
-    } catch (error) {
-        console.log('Status update failed');
-    }
-    
-    // Clear local storage
-    localStorage.removeItem('messenger_token');
-    localStorage.removeItem('messenger_user');
-    
-    // Clear intervals
-    stopIntervals();
-    
-    // Reset variables
-    currentUser = null;
-    currentToken = null;
-    lastMessageId = 0;
-    
-    // Reset UI
-    document.getElementById('messages-container').innerHTML = `
-        <div class="welcome-message">
-            <div class="welcome-icon">
-                <i class="fas fa-comment-slash"></i>
-            </div>
-            <h3>Hozircha xabarlar yo'q</h3>
-            <p>Biror narsa yozishni boshlang!</p>
-        </div>
-    `;
-    
-    // Clear inputs
-    document.getElementById('username').value = '';
-    document.getElementById('password').value = '';
-    
-    // Show login screen
-    showLoginScreen();
-}
-
-// Load messages
-async function loadMessages() {
-    try {
-        const response = await fetch('/api/messages');
-        const messages = await response.json();
-        
-        // Check if there are new messages
-        const latestMessage = messages[messages.length - 1];
-        if (latestMessage && latestMessage.id !== lastMessageId) {
-            lastMessageId = latestMessage.id;
-            displayMessages(messages);
-            scrollToBottom();
-            
-            // Mark other user's messages as seen
-            await markMessagesAsSeen(messages);
-        }
-    } catch (error) {
-        console.log('Xabarlarni yuklashda xato:', error);
-    }
-}
-
-// Display messages
-function displayMessages(messages) {
-    const container = document.getElementById('messages-container');
-    
-    if (messages.length === 0) {
-        container.innerHTML = `
-            <div class="welcome-message">
-                <div class="welcome-icon">
-                    <i class="fas fa-comment-slash"></i>
-                </div>
-                <h3>Hozircha xabarlar yo'q</h3>
-                <p>Biror narsa yozishni boshlang!</p>
-            </div>
-        `;
-        return;
-    }
-    
-    // Clear welcome message if exists
-    const welcomeMsg = container.querySelector('.welcome-message');
-    if (welcomeMsg) {
-        welcomeMsg.remove();
-    }
-    
-    // Clear existing messages
-    container.innerHTML = '';
-    
-    // Display all messages
-    messages.forEach(message => {
-        const messageElement = createMessageElement(message);
-        container.appendChild(messageElement);
-    });
-}
-
-// Create message element
-function createMessageElement(message) {
-    const div = document.createElement('div');
-    div.className = `message ${message.senderId === currentUser.id ? 'sent' : 'received'}`;
-    
-    // Format time
-    const messageTime = new Date(message.timestamp);
-    const timeString = messageTime.toLocaleTimeString('uz-UZ', {
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-    
-    // Seen status
-    let seenStatus = '';
-    if (message.senderId === currentUser.id) {
-        if (message.seen && message.seenAt) {
-            const seenTime = new Date(message.seenAt);
-            const seenTimeString = seenTime.toLocaleTimeString('uz-UZ', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-            seenStatus = `
-                <div class="message-status seen">
-                    <i class="fas fa-check-double"></i>
-                    <span class="seen-text">ko'rildi ${seenTimeString}</span>
-                </div>
-            `;
-        } else {
-            seenStatus = `
-                <div class="message-status">
-                    <i class="fas fa-check"></i>
-                </div>
-            `;
-        }
-    }
-    
-    div.innerHTML = `
-        <div class="message-content">${message.content}</div>
-        <div class="message-info">
-            <div class="message-time">${timeString}</div>
-            ${seenStatus}
-        </div>
-    `;
-    
-    return div;
-}
-
-// Mark messages as seen
-async function markMessagesAsSeen(messages) {
-    const otherUserMessages = messages.filter(msg => 
-        msg.senderId !== currentUser.id && !msg.seen
-    );
-    
-    for (const message of otherUserMessages) {
-        try {
-            await fetch('/api/messages', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messageId: message.id,
-                    token: currentToken
+                body: JSON.stringify({ 
+                    userId: currentUser.id, 
+                    online: online 
                 })
             });
         } catch (error) {
-            console.log('Mark as seen failed:', error);
+            console.error('Online status yangilashda xato:', error);
         }
     }
-}
-
-// Load users
-async function loadUsers() {
-    try {
-        const response = await fetch('/api/users');
-        const users = await response.json();
+    
+    // Login funksiyasi
+    loginBtn.addEventListener('click', async function() {
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value.trim();
         
-        const otherUser = users.find(u => u.id !== currentUser.id);
-        if (otherUser) {
-            const statusElement = document.getElementById('status-info');
-            
-            if (otherUser.online) {
-                statusElement.textContent = `${otherUser.name} onlayn`;
-                statusElement.style.color = '#4caf50';
-            } else {
-                const lastSeenTime = new Date(otherUser.lastSeen);
-                const timeString = lastSeenTime.toLocaleTimeString('uz-UZ', {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-                statusElement.textContent = `${otherUser.name} oxirgi marta ${timeString}`;
-                statusElement.style.color = '#666';
-            }
+        if (!username || !password) {
+            alert('Login va parolni kiriting!');
+            return;
         }
         
-        // Update user avatar
-        if (currentUser) {
-            document.getElementById('user-avatar').textContent = currentUser.name.charAt(0);
-        }
-    } catch (error) {
-        console.log('Foydalanuvchilarni yuklashda xato:', error);
-    }
-}
-
-// Send message
-async function sendMessage() {
-    const input = document.getElementById('message-input');
-    const content = input.value.trim();
-    
-    if (!content) return;
-    
-    try {
-        const response = await fetch('/api/messages', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                token: currentToken,
-                content: content
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            input.value = '';
-            input.focus();
+        try {
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            });
             
-            // Add message to UI immediately
-            const container = document.getElementById('messages-container');
-            const welcomeMsg = container.querySelector('.welcome-message');
-            if (welcomeMsg) {
-                welcomeMsg.remove();
-            }
+            const data = await response.json();
             
-            const messageElement = createMessageElement(data.message);
-            container.appendChild(messageElement);
-            scrollToBottom();
-            
-            // Auto mark as seen after 2 seconds
-            setTimeout(async () => {
-                try {
-                    await fetch('/api/messages', {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            messageId: data.message.id,
-                            token: currentToken
-                        })
-                    });
-                } catch (error) {
-                    console.log('Auto seen failed:', error);
+            if (data.success) {
+                currentUser = data.user;
+                currentToken = data.token;
+                
+                // Boshqa foydalanuvchini aniqlash
+                otherUser = currentUser.id === 1 ? 
+                    { id: 2, name: 'Jahongir', username: 'jahongir_177' } : 
+                    { id: 1, name: 'Nafisa', username: 'nafisa_177' };
+                
+                // Eshatib qolish
+                if (rememberMe.checked) {
+                    localStorage.setItem('messenger_token', currentToken);
+                    localStorage.setItem('messenger_user', JSON.stringify(currentUser));
                 }
-            }, 2000);
+                
+                // Online statusni yangilash
+                await updateOnlineStatus(true);
+                
+                showChatPage();
+                
+                // Xabarlarni yuklash
+                loadMessages();
+                
+                // Foydalanuvchilar holatini yuklash
+                loadUsers();
+            } else {
+                alert('Login yoki parol noto\'g\'ri!');
+            }
+        } catch (error) {
+            console.error('Login xatosi:', error);
+            alert('Server bilan aloqa xatosi!');
         }
-    } catch (error) {
-        console.log('Xabar yuborishda xato:', error);
-        alert('Xabar yuborishda xatolik!');
-    }
-}
-
-// Start intervals
-function startIntervals() {
-    stopIntervals(); // Clear any existing intervals
+    });
     
-    messageCheckInterval = setInterval(loadMessages, 2000);
-    userCheckInterval = setInterval(loadUsers, 3000);
-}
-
-// Stop intervals
-function stopIntervals() {
-    if (messageCheckInterval) {
-        clearInterval(messageCheckInterval);
-        messageCheckInterval = null;
+    // Logout funksiyasi
+    logoutBtn.addEventListener('click', async function() {
+        // Online statusni yangilash
+        await updateOnlineStatus(false);
+        
+        // Saqlangan ma'lumotlarni o'chirish
+        localStorage.removeItem('messenger_token');
+        localStorage.removeItem('messenger_user');
+        
+        // Intervallarni to'xtatish
+        if (messageCheckInterval) clearInterval(messageCheckInterval);
+        if (userCheckInterval) clearInterval(userCheckInterval);
+        
+        // Login sahifasiga qaytish
+        showLoginPage();
+        
+        // Ma'lumotlarni tozalash
+        currentUser = null;
+        currentToken = null;
+        otherUser = null;
+        lastMessageId = 0;
+        
+        // Xabarlar maydonini tozalash
+        messagesContainer.innerHTML = '<div class="welcome-message"><h3>Xush kelibsiz!</h3><p>Xabarlar bu yerda ko\'rinadi...</p></div>';
+        
+        // Input maydonlarini tozalash
+        document.getElementById('username').value = '';
+        document.getElementById('password').value = '';
+    });
+    
+    // Xabarlarni yuklash
+    async function loadMessages() {
+        try {
+            const response = await fetch('/api/messages');
+            const messages = await response.json();
+            
+            // Oxirgi xabarni topish
+            const latestMessage = messages[messages.length - 1];
+            if (latestMessage && latestMessage.id !== lastMessageId) {
+                lastMessageId = latestMessage.id;
+                
+                // Xabarlarni UI ga chiqarish
+                displayMessages(messages);
+                
+                // Oxirgi xabarga o'tish
+                scrollToBottom();
+                
+                // Boshqa foydalanuvchining xabarlarini ko'rilgan deb belgilash
+                await markOtherUserMessagesAsSeen(messages);
+            } else if (messages.length === 0 && lastMessageId !== 0) {
+                // Xabarlar bo'sh bo'lsa
+                displayMessages(messages);
+                lastMessageId = 0;
+            }
+        } catch (error) {
+            console.error('Xabarlarni yuklash xatosi:', error);
+        }
     }
     
-    if (userCheckInterval) {
-        clearInterval(userCheckInterval);
-        userCheckInterval = null;
+    // Xabarlarni UI ga chiqarish
+    function displayMessages(messages) {
+        // Welcome xabarini olib tashlash (agar xabarlar mavjud bo'lsa)
+        if (messages.length > 0) {
+            const welcomeMessage = messagesContainer.querySelector('.welcome-message');
+            if (welcomeMessage) {
+                welcomeMessage.remove();
+            }
+        } else {
+            // Xabarlar bo'sh bo'lsa, welcome message qo'shish
+            if (!messagesContainer.querySelector('.welcome-message')) {
+                messagesContainer.innerHTML = '<div class="welcome-message"><h3>Xush kelibsiz!</h3><p>Xabarlar bu yerda ko\'rinadi...</p></div>';
+            }
+            return;
+        }
+        
+        // Avvalgi xabarlarni tozalash
+        messagesContainer.innerHTML = '';
+        
+        // Har bir xabarni chiqarish
+        messages.forEach(message => {
+            addMessageToUI(message);
+        });
     }
-}
-
-// Scroll to bottom
-function scrollToBottom() {
-    const container = document.getElementById('messages-container');
-    container.scrollTop = container.scrollHeight;
-}
-
-// Show login screen
-function showLoginScreen() {
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('chat-screen').style.display = 'none';
+    
+    // Xabarni UI ga qo'shish
+    function addMessageToUI(message) {
+        const messageElement = document.createElement('div');
+        messageElement.className = `message ${message.senderId === currentUser.id ? 'sent' : 'received'}`;
+        messageElement.setAttribute('data-message-id', message.id);
+        
+        // Vaqtni formatlash
+        const messageTime = new Date(message.timestamp);
+        const timeString = messageTime.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+        
+        // Ko'rilganlik holati
+        let seenStatus = '';
+        if (message.senderId === currentUser.id) {
+            if (message.seen && message.seenAt) {
+                const seenTime = new Date(message.seenAt);
+                const seenTimeString = seenTime.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+                seenStatus = `<div class="message-status seen">
+                    <i class="fas fa-check-double"></i>
+                    <span class="seen-text">ko'rildi ${seenTimeString}</span>
+                </div>`;
+            } else {
+                seenStatus = `<div class="message-status">
+                    <i class="fas fa-check"></i>
+                </div>`;
+            }
+        }
+        
+        messageElement.innerHTML = `
+            <div class="message-content">${message.content}</div>
+            <div class="message-info">
+                <div class="message-time">${timeString}</div>
+                ${seenStatus}
+            </div>
+        `;
+        
+        messagesContainer.appendChild(messageElement);
+    }
+    
+    // Xabar yuborish
+    sendBtn.addEventListener('click', sendMessage);
+    
+    messageInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    
+    async function sendMessage() {
+        const content = messageInput.value.trim();
+        
+        if (!content) return;
+        
+        try {
+            const response = await fetch('/api/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    token: currentToken,
+                    content: content
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                messageInput.value = '';
+                messageInput.focus();
+                // Xabar UI ga qo'shish
+                addMessageToUI(data.message);
+                scrollToBottom();
+                
+                // 2 soniyadan keyin seen qilish (boshqa foydalanuvchi o'qigan deb hisoblash)
+                setTimeout(async () => {
+                    await markMessageAsSeen(data.message.id);
+                }, 2000);
+            }
+        } catch (error) {
+            console.error('Xabar yuborish xatosi:', error);
+            alert('Xabar yuborishda xato!');
+        }
+    }
+    
+    // Xabarni ko'rilgan deb belgilash
+    async function markMessageAsSeen(messageId) {
+        try {
+            await fetch('/api/messages', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    messageId: messageId, 
+                    token: currentToken 
+                })
+            });
+        } catch (error) {
+            console.error('Xabarni ko\'rilgan deb belgilash xatosi:', error);
+        }
+    }
+    
+    // Boshqa foydalanuvchining xabarlarini ko'rilgan deb belgilash
+    async function markOtherUserMessagesAsSeen(messages) {
+        const otherUserMessages = messages.filter(m => 
+            m.senderId === otherUser.id && !m.seen
+        );
+        
+        for (const message of otherUserMessages) {
+            await markMessageAsSeen(message.id);
+        }
+    }
+    
+    // Foydalanuvchilarni yuklash
+    async function loadUsers() {
+        try {
+            const response = await fetch('/api/users');
+            const users = await response.json();
+            
+            users.forEach(user => {
+                updateUserStatus(user.id, user.online, user.lastSeen);
+            });
+        } catch (error) {
+            console.error('Foydalanuvchilarni yuklash xatosi:', error);
+        }
+    }
+    
+    // Foydalanuvchi holatini yangilash
+    function updateUserStatus(userId, online, lastSeen) {
+        // Boshqa foydalanuvchi
+        if (otherUser && userId === otherUser.id) {
+            if (online) {
+                otherUserStatus.textContent = `${otherUser.name} onlayn`;
+                otherUserStatus.style.color = '#4caf50';
+            } else {
+                const lastSeenDate = new Date(lastSeen);
+                const timeString = lastSeenDate.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+                otherUserStatus.textContent = `${otherUser.name} oxirgi marta ${timeString}`;
+                otherUserStatus.style.color = '#65676b';
+            }
+        }
+        
+        // O'zimning holatim
+        if (currentUser && userId === currentUser.id) {
+            currentUserAvatar.textContent = currentUser.name.charAt(0);
+        }
+    }
+    
+    // Login sahifasini ko'rsatish
+    function showLoginPage() {
+        chatContainer.style.display = 'none';
+        loginContainer.style.display = 'block';
+        document.getElementById('username').focus();
+    }
+    
+    // Chat sahifasini ko'rsatish
+    function showChatPage() {
+        loginContainer.style.display = 'none';
+        chatContainer.style.display = 'block';
+        
+        // UI ni yangilash
+        currentUserName.textContent = currentUser.name;
+        currentUserAvatar.textContent = currentUser.name.charAt(0);
+        currentUserAvatar.title = currentUser.name;
+        
+        // Input maydonini yoqish
+        messageInput.disabled = false;
+        sendBtn.disabled = false;
+        messageInput.focus();
+        
+        // Interval orqali xabarlarni tekshirish
+        if (messageCheckInterval) clearInterval(messageCheckInterval);
+        messageCheckInterval = setInterval(loadMessages, 2000);
+        
+        // Interval orqali foydalanuvchilarni tekshirish
+        if (userCheckInterval) clearInterval(userCheckInterval);
+        userCheckInterval = setInterval(loadUsers, 3000);
+    }
+    
+    // Pastga o'tish
+    function scrollToBottom() {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    // Enter tugmasi bilan login
+    document.getElementById('password').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            loginBtn.click();
+        }
+    });
+    
+    // Sayt yuklanganda username maydoniga fokus
     document.getElementById('username').focus();
-}
-
-// Show chat screen
-function showChatScreen() {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('chat-screen').style.display = 'block';
-    document.getElementById('current-user-name').textContent = currentUser.name;
-    document.getElementById('message-input').focus();
-}
+});
