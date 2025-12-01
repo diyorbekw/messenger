@@ -64,8 +64,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Boshqa foydalanuvchini aniqlash
         otherUser = currentUser.id === 1 ? 
-            { id: 2, name: 'Jahongir', username: 'jahongir_177' } : 
-            { id: 1, name: 'Nafisa', username: 'nafisa_177' };
+            { id: 2, name: 'Jahongir' } : 
+            { id: 1, name: 'Nafisa' };
         
         // Online statusni yangilash
         await updateOnlineStatus(true);
@@ -124,8 +124,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Boshqa foydalanuvchini aniqlash
                 otherUser = currentUser.id === 1 ? 
-                    { id: 2, name: 'Jahongir', username: 'jahongir_177' } : 
-                    { id: 1, name: 'Nafisa', username: 'nafisa_177' };
+                    { id: 2, name: 'Jahongir' } : 
+                    { id: 1, name: 'Nafisa' };
                 
                 // Eshatib qolish
                 if (rememberMe.checked) {

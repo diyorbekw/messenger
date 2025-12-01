@@ -31,7 +31,6 @@ module.exports = async (req, res) => {
   if (req.method === 'POST' || req.method === 'PUT') {
     try {
       if (req.body) {
-        // Vercel'da body JSON formatida keladi
         body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       }
     } catch (error) {
