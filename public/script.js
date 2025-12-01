@@ -16,8 +16,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentUser = null;
     let currentToken = null;
     let otherUser = null;
-    let socket = null;
     let messageCheckInterval = null;
+    let userCheckInterval = null;
+    let lastMessageId = 0;
     
     // Sahifa yuklanganda avtomatik login
     autoLogin();
@@ -30,7 +31,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (savedToken && savedUser) {
             try {
                 // Tokenni tekshirish
-                const response = await fetch('/api/verify-token', {
+                const response = await fetch('/api/verify.js', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -66,16 +67,34 @@ document.addEventListener('DOMContentLoaded', function() {
             { id: 2, name: 'Jahongir', username: 'jahongir_177' } : 
             { id: 1, name: 'Nafisa', username: 'nafisa_177' };
         
-        showChatPage();
+        // Online statusni yangilash
+        await updateOnlineStatus(true);
         
-        // WebSocket ulanishini o'rnatish
-        setupWebSocket();
+        showChatPage();
         
         // Xabarlarni yuklash
         loadMessages();
         
         // Foydalanuvchilar holatini yuklash
         loadUsers();
+    }
+    
+    // Online statusni yangilash
+    async function updateOnlineStatus(online) {
+        try {
+            await fetch('/api/users.js', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    userId: currentUser.id, 
+                    online: online 
+                })
+            });
+        } catch (error) {
+            console.error('Online status yangilashda xato:', error);
+        }
     }
     
     // Login funksiyasi
@@ -89,7 +108,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         try {
-            const response = await fetch('/api/login', {
+            const response = await fetch('/api/login.js', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -114,10 +133,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     localStorage.setItem('messenger_user', JSON.stringify(currentUser));
                 }
                 
-                showChatPage();
+                // Online statusni yangilash
+                await updateOnlineStatus(true);
                 
-                // WebSocket ulanishini o'rnatish
-                setupWebSocket();
+                showChatPage();
                 
                 // Xabarlarni yuklash
                 loadMessages();
@@ -134,16 +153,17 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Logout funksiyasi
-    logoutBtn.addEventListener('click', function() {
+    logoutBtn.addEventListener('click', async function() {
+        // Online statusni yangilash
+        await updateOnlineStatus(false);
+        
         // Saqlangan ma'lumotlarni o'chirish
         localStorage.removeItem('messenger_token');
         localStorage.removeItem('messenger_user');
         
         // Intervallarni to'xtatish
         if (messageCheckInterval) clearInterval(messageCheckInterval);
-        
-        // WebSocket ulanishini yopish
-        if (socket) socket.close();
+        if (userCheckInterval) clearInterval(userCheckInterval);
         
         // Login sahifasiga qaytish
         showLoginPage();
@@ -161,78 +181,30 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('password').value = '';
     });
     
-    // WebSocket ulanishini o'rnatish
-    function setupWebSocket() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}`;
-        
-        socket = new WebSocket(wsUrl);
-        
-        socket.onopen = function() {
-            console.log('WebSocket ulandi');
-            // User ID ni serverga yuborish
-            socket.send(JSON.stringify({
-                type: 'register',
-                userId: currentUser.id
-            }));
-        };
-        
-        socket.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            handleWebSocketMessage(data);
-        };
-        
-        socket.onclose = function() {
-            console.log('WebSocket ulanishi uzildi');
-            // 5 soniyadan keyin qayta ulanishni sinash
-            setTimeout(setupWebSocket, 5000);
-        };
-        
-        socket.onerror = function(error) {
-            console.error('WebSocket xatosi:', error);
-        };
-    }
-    
-    // WebSocket xabarlarini qayta ishlash
-    function handleWebSocketMessage(data) {
-        switch (data.type) {
-            case 'new_message':
-                addMessageToUI(data.message);
-                // Agar xabar boshqa foydalanuvchidan bo'lsa va men onlayn bo'lsam, ko'rilgan deb belgilash
-                if (data.message.senderId !== currentUser.id && socket.readyState === WebSocket.OPEN) {
-                    markMessageAsSeen(data.message.id);
-                }
-                break;
-                
-            case 'message_seen':
-                updateMessageStatus(data.messageId, data.seenAt);
-                break;
-                
-            case 'user_status':
-                updateUserStatus(data.userId, data.online, data.lastSeen);
-                break;
-        }
-    }
-    
     // Xabarlarni yuklash
     async function loadMessages() {
         try {
-            const response = await fetch('/api/messages');
+            const response = await fetch('/api/messages.js');
             const messages = await response.json();
             
-            // Agar xabarlar soni o'zgarmagan bo'lsa, yangilash shart emas
-            if (messages.length === getMessageCountInUI()) {
-                return;
+            // Oxirgi xabarni topish
+            const latestMessage = messages[messages.length - 1];
+            if (latestMessage && latestMessage.id !== lastMessageId) {
+                lastMessageId = latestMessage.id;
+                
+                // Xabarlarni UI ga chiqarish
+                displayMessages(messages);
+                
+                // Oxirgi xabarga o'tish
+                scrollToBottom();
+                
+                // Barcha xabarlarni tekshirish va ko'rilgan deb belgilash
+                await checkAllMessages(messages);
+            } else if (messages.length === 0 && lastMessageId !== 0) {
+                // Xabarlar bo'sh bo'lsa
+                displayMessages(messages);
+                lastMessageId = 0;
             }
-            
-            // Xabarlarni UI ga chiqarish
-            displayMessages(messages);
-            
-            // Oxirgi xabarga o'tish
-            scrollToBottom();
-            
-            // Barcha xabarlarni tekshirish va ko'rilgan deb belgilash
-            checkAllMessages(messages);
         } catch (error) {
             console.error('Xabarlarni yuklash xatosi:', error);
         }
@@ -252,6 +224,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (welcomeMessage) {
                 welcomeMessage.remove();
             }
+        } else {
+            // Xabarlar bo'sh bo'lsa, welcome message qo'shish
+            if (!messagesContainer.querySelector('.welcome-message')) {
+                messagesContainer.innerHTML = '<div class="welcome-message"><h3>Xush kelibsiz!</h3><p>Xabarlar bu yerda ko\'rinadi...</p></div>';
+            }
+            return;
         }
         
         // Avvalgi xabarlarni tozalash (faqat message class'li elementlarni)
@@ -322,7 +300,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!content) return;
         
         try {
-            const response = await fetch('/api/messages', {
+            const response = await fetch('/api/messages.js', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -338,7 +316,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 messageInput.value = '';
                 messageInput.focus();
-                // Xabar UI ga WebSocket orqali qo'shiladi
+                // Xabar UI ga qo'shish
+                addMessageToUI(data.message);
                 scrollToBottom();
             }
         } catch (error) {
@@ -350,12 +329,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Xabarni ko'rilgan deb belgilash
     async function markMessageAsSeen(messageId) {
         try {
-            await fetch(`/api/messages/${messageId}/seen`, {
-                method: 'POST',
+            await fetch('/api/messages.js', {
+                method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ token: currentToken })
+                body: JSON.stringify({ 
+                    messageId: messageId, 
+                    token: currentToken 
+                })
             });
         } catch (error) {
             console.error('Xabarni ko\'rilgan deb belgilash xatosi:', error);
@@ -364,50 +346,33 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Barcha xabarlarni tekshirish
     async function checkAllMessages(messages) {
-        // Barcha o'z xabarlarimni tekshirish
+        // Boshqa foydalanuvchining xabarlarini ko'rilgan deb belgilash
+        const theirMessages = messages.filter(m => 
+            m.senderId === otherUser.id && !m.seen
+        );
+        
+        for (const message of theirMessages) {
+            await markMessageAsSeen(message.id);
+        }
+        
+        // O'z xabarlarimni tekshirish
         const myUnseenMessages = messages.filter(m => 
             m.senderId === currentUser.id && !m.seen
         );
         
         // Agar boshqa foydalanuvchi onlayn bo'lsa, barcha xabarlarni ko'rilgan deb belgilash
-        if (socket.readyState === WebSocket.OPEN && otherUser) {
-            for (const message of myUnseenMessages) {
+        for (const message of myUnseenMessages) {
+            // 1 soniya kutib, keyin seen qilish (boshqa foydalanuvchi o'qigan deb hisoblash)
+            setTimeout(async () => {
                 await markMessageAsSeen(message.id);
-            }
-        }
-        
-        // Boshqa foydalanuvchining xabarlarini ko'rilgan deb belgilash
-        const theirUnseenMessages = messages.filter(m => 
-            m.senderId === otherUser.id && !m.seen && m.senderId !== currentUser.id
-        );
-        
-        for (const message of theirUnseenMessages) {
-            await markMessageAsSeen(message.id);
-        }
-    }
-    
-    // Xabar holatini yangilash
-    function updateMessageStatus(messageId, seenAt) {
-        const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-        if (messageElement) {
-            const statusElement = messageElement.querySelector('.message-status:not(.seen)');
-            if (statusElement) {
-                const seenTime = new Date(seenAt);
-                const seenTimeString = seenTime.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
-                
-                statusElement.className = 'message-status seen';
-                statusElement.innerHTML = `
-                    <i class="fas fa-check-double"></i>
-                    <span class="seen-text">ko'rildi ${seenTimeString}</span>
-                `;
-            }
+            }, 1000);
         }
     }
     
     // Foydalanuvchilarni yuklash
     async function loadUsers() {
         try {
-            const response = await fetch('/api/users');
+            const response = await fetch('/api/users.js');
             const users = await response.json();
             
             users.forEach(user => {
@@ -415,6 +380,22 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         } catch (error) {
             console.error('Foydalanuvchilarni yuklash xatosi:', error);
+        }
+    }
+    
+    // Foydalanuvchi holatini yangilash
+    function updateUserStatus(userId, online, lastSeen) {
+        // Boshqa foydalanuvchi
+        if (otherUser && userId === otherUser.id) {
+            if (online) {
+                otherUserStatus.textContent = `${otherUser.name} onlayn`;
+                otherUserStatus.style.color = '#4caf50';
+            } else {
+                const lastSeenDate = new Date(lastSeen);
+                const timeString = lastSeenDate.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+                otherUserStatus.textContent = `${otherUser.name} oxirgi marta ${timeString}`;
+                otherUserStatus.style.color = '#65676b';
+            }
         }
     }
     
@@ -443,6 +424,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // Interval orqali xabarlarni tekshirish
         if (messageCheckInterval) clearInterval(messageCheckInterval);
         messageCheckInterval = setInterval(loadMessages, 2000);
+        
+        // Interval orqali foydalanuvchilarni tekshirish
+        if (userCheckInterval) clearInterval(userCheckInterval);
+        userCheckInterval = setInterval(loadUsers, 5000);
     }
     
     // Pastga o'tish
@@ -457,6 +442,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Sayt yuklanganda parol maydoniga fokus
+    // Sayt yuklanganda username maydoniga fokus
     document.getElementById('username').focus();
 });
