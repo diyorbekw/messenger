@@ -19,36 +19,15 @@ document.addEventListener('DOMContentLoaded', function() {
     let messageCheckInterval = null;
     let userCheckInterval = null;
     
-    // Test API connection
-    testAPI();
-    
     // Avtomatik login
     autoLogin();
     
-    // Test API connection
-    async function testAPI() {
-        try {
-            console.log('Testing API connection...');
-            const response = await fetch('/api/test');
-            if (response.ok) {
-                const data = await response.json();
-                console.log('API test result:', data);
-            } else {
-                console.log('API test failed:', response.status);
-            }
-        } catch (error) {
-            console.log('API test error:', error);
-        }
-    }
-    
     // Avtomatik login funksiyasi
     async function autoLogin() {
-        console.log('Auto login started...');
         const savedToken = localStorage.getItem('messenger_token');
         const savedUser = localStorage.getItem('messenger_user');
         
         if (savedToken && savedUser) {
-            console.log('Found saved credentials');
             try {
                 const response = await fetch('/api/verify', {
                     method: 'POST',
@@ -58,28 +37,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     body: JSON.stringify({ token: savedToken })
                 });
                 
-                console.log('Verify response status:', response.status);
-                
                 if (response.ok) {
                     const data = await response.json();
-                    console.log('Verify response:', data);
-                    
                     if (data.valid) {
-                        console.log('Token valid, logging in...');
                         const user = JSON.parse(savedUser);
                         await loginWithToken(user, savedToken);
                         return;
-                    } else {
-                        console.log('Token invalid');
                     }
-                } else {
-                    console.log('Verify request failed:', response.status);
                 }
             } catch (error) {
-                console.log('Auto login error:', error);
+                console.log('Auto login xatosi:', error);
             }
-        } else {
-            console.log('No saved credentials found');
         }
         
         showLoginPage();
@@ -87,7 +55,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Token bilan login qilish
     async function loginWithToken(user, token) {
-        console.log('Login with token:', user.name);
         currentUser = user;
         currentToken = token;
         
@@ -108,14 +75,24 @@ document.addEventListener('DOMContentLoaded', function() {
                     online: true 
                 })
             });
-            console.log('Online status updated');
         } catch (error) {
-            console.log('Online status update error:', error);
+            console.log('Online status yangilash xatosi:', error);
         }
         
         showChatPage();
         await loadMessages();
         await loadUsers();
+        
+        // Mark all messages as seen
+        try {
+            await fetch('/api/messages/mark-all-seen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: currentToken })
+            });
+        } catch (error) {
+            console.log('Mark all seen xatosi:', error);
+        }
         
         // Start intervals
         startIntervals();
@@ -123,7 +100,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Login funksiyasi
     loginBtn.addEventListener('click', async function() {
-        console.log('Login button clicked');
         const username = document.getElementById('username').value.trim();
         const password = document.getElementById('password').value.trim();
         
@@ -131,8 +107,6 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Login va parolni kiriting!');
             return;
         }
-        
-        console.log('Attempting login with:', username);
         
         try {
             const response = await fetch('/api/login', {
@@ -143,17 +117,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify({ username, password })
             });
             
-            console.log('Login response status:', response.status);
-            
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
             const data = await response.json();
-            console.log('Login response data:', data);
             
             if (data.success) {
-                console.log('Login successful!');
                 currentUser = data.user;
                 currentToken = data.token;
                 
@@ -176,17 +146,27 @@ document.addEventListener('DOMContentLoaded', function() {
                         body: JSON.stringify({ userId: currentUser.id, online: true })
                     });
                 } catch (error) {
-                    console.log('Status update error:', error);
+                    console.log('Status update xatosi:', error);
                 }
                 
                 showChatPage();
                 await loadMessages();
                 await loadUsers();
                 
+                // Mark all messages as seen
+                try {
+                    await fetch('/api/messages/mark-all-seen', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: currentToken })
+                    });
+                } catch (error) {
+                    console.log('Mark all seen xatosi:', error);
+                }
+                
                 // Start intervals
                 startIntervals();
             } else {
-                console.log('Login failed');
                 alert('Login yoki parol noto\'g\'ri!');
             }
         } catch (error) {
@@ -197,8 +177,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Logout funksiyasi
     logoutBtn.addEventListener('click', async function() {
-        console.log('Logout clicked');
-        
         if (currentUser) {
             // Update online status
             try {
@@ -208,7 +186,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     body: JSON.stringify({ userId: currentUser.id, online: false })
                 });
             } catch (error) {
-                console.log('Status update error:', error);
+                console.log('Status update xatosi:', error);
             }
         }
         
@@ -238,18 +216,38 @@ document.addEventListener('DOMContentLoaded', function() {
     // Xabarlarni yuklash
     async function loadMessages() {
         try {
-            console.log('Loading messages...');
             const response = await fetch('/api/messages');
             
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(`HTTP ${response.status}`);
             }
             
             const messages = await response.json();
-            console.log('Messages loaded:', messages.length);
             
             displayMessages(messages);
             scrollToBottom();
+            
+            // Mark other user's messages as seen
+            if (currentUser && otherUser) {
+                const otherUserMessages = messages.filter(m => 
+                    m.senderId === otherUser.id && !m.seen
+                );
+                
+                for (const message of otherUserMessages) {
+                    try {
+                        await fetch('/api/messages/seen', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                token: currentToken, 
+                                messageId: message.id 
+                            })
+                        });
+                    } catch (error) {
+                        console.log('Mark seen xatosi:', error);
+                    }
+                }
+            }
         } catch (error) {
             console.error('Xabarlarni yuklash xatosi:', error);
         }
@@ -333,8 +331,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (!content) return;
         
-        console.log('Sending message:', content);
-        
         try {
             const response = await fetch('/api/messages', {
                 method: 'POST',
@@ -347,21 +343,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
             });
             
-            console.log('Send message response status:', response.status);
-            
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(`HTTP ${response.status}`);
             }
             
             const data = await response.json();
-            console.log('Send message response:', data);
             
             if (data.success) {
                 messageInput.value = '';
                 messageInput.focus();
                 addMessageToUI(data.message);
                 scrollToBottom();
-                console.log('Message sent successfully');
             } else {
                 alert('Xabar yuborishda xato: ' + (data.message || 'Noma\'lum xato'));
             }
@@ -377,7 +369,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await fetch('/api/users');
             
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(`HTTP ${response.status}`);
             }
             
             const users = await response.json();
@@ -415,11 +407,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function startIntervals() {
         stopIntervals(); // Avvalgi intervallarni tozalash
         
-        console.log('Starting intervals...');
         messageCheckInterval = setInterval(loadMessages, 2000);
         userCheckInterval = setInterval(loadUsers, 5000);
-        
-        console.log('Intervals started');
     }
     
     // Intervallarni to'xtatish
@@ -433,13 +422,10 @@ document.addEventListener('DOMContentLoaded', function() {
             clearInterval(userCheckInterval);
             userCheckInterval = null;
         }
-        
-        console.log('Intervals stopped');
     }
     
     // Login sahifasini ko'rsatish
     function showLoginPage() {
-        console.log('Showing login page');
         chatContainer.style.display = 'none';
         loginContainer.style.display = 'block';
         document.getElementById('username').focus();
@@ -447,7 +433,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Chat sahifasini ko'rsatish
     function showChatPage() {
-        console.log('Showing chat page');
         loginContainer.style.display = 'none';
         chatContainer.style.display = 'block';
         
@@ -460,8 +445,6 @@ document.addEventListener('DOMContentLoaded', function() {
         messageInput.disabled = false;
         sendBtn.disabled = false;
         messageInput.focus();
-        
-        console.log('Chat page ready for:', currentUser.name);
     }
     
     // Pastga o'tish
