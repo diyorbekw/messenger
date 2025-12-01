@@ -3,12 +3,7 @@
   "version": "1.0.0",
   "description": "Ikki kishilik messenger",
   "scripts": {
-    "dev": "vercel dev",
-    "start": "vercel dev",
-    "build": "echo 'No build required'"
+    "start": "echo 'Vercel serverless'"
   },
-  "dependencies": {},
-  "devDependencies": {
-    "vercel": "^28.16.0"
-  }
+  "dependencies": {}
 }

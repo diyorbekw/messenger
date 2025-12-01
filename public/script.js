@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // DOM elementlari
     const loginContainer = document.getElementById('login-container');
     const chatContainer = document.getElementById('chat-container');
     const loginBtn = document.getElementById('login-btn');
@@ -12,7 +11,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const otherUserStatus = document.getElementById('other-user-status');
     const rememberMe = document.getElementById('remember-me');
     
-    // Global o'zgaruvchilar
     let currentUser = null;
     let currentToken = null;
     let otherUser = null;
@@ -23,26 +21,21 @@ document.addEventListener('DOMContentLoaded', function() {
     // Sahifa yuklanganda avtomatik login
     autoLogin();
     
-    // Avtomatik login funksiyasi
     async function autoLogin() {
         const savedToken = localStorage.getItem('messenger_token');
         const savedUser = localStorage.getItem('messenger_user');
         
         if (savedToken && savedUser) {
             try {
-                // Tokenni tekshirish
                 const response = await fetch('/api/verify', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ token: savedToken })
                 });
                 
                 if (response.ok) {
                     const data = await response.json();
                     if (data.valid) {
-                        // Token yaroqli, avtomatik login
                         const user = JSON.parse(savedUser);
                         await loginWithToken(user, savedToken);
                         return;
@@ -53,51 +46,34 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        // Agar token saqlanmagan bo'lsa yoki yaroqsiz bo'lsa
         showLoginPage();
     }
     
-    // Token bilan login qilish
     async function loginWithToken(user, token) {
         currentUser = user;
         currentToken = token;
-        
-        // Boshqa foydalanuvchini aniqlash
         otherUser = currentUser.id === 1 ? 
             { id: 2, name: 'Jahongir' } : 
             { id: 1, name: 'Nafisa' };
         
-        // Online statusni yangilash
         await updateOnlineStatus(true);
-        
         showChatPage();
-        
-        // Xabarlarni yuklash
         loadMessages();
-        
-        // Foydalanuvchilar holatini yuklash
         loadUsers();
     }
     
-    // Online statusni yangilash
     async function updateOnlineStatus(online) {
         try {
             await fetch('/api/users', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    userId: currentUser.id, 
-                    online: online 
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUser.id, online })
             });
         } catch (error) {
             console.error('Online status yangilashda xato:', error);
         }
     }
     
-    // Login funksiyasi
     loginBtn.addEventListener('click', async function() {
         const username = document.getElementById('username').value.trim();
         const password = document.getElementById('password').value.trim();
@@ -110,9 +86,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const response = await fetch('/api/login', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
             });
             
@@ -121,27 +95,18 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 currentUser = data.user;
                 currentToken = data.token;
-                
-                // Boshqa foydalanuvchini aniqlash
                 otherUser = currentUser.id === 1 ? 
                     { id: 2, name: 'Jahongir' } : 
                     { id: 1, name: 'Nafisa' };
                 
-                // Eshatib qolish
                 if (rememberMe.checked) {
                     localStorage.setItem('messenger_token', currentToken);
                     localStorage.setItem('messenger_user', JSON.stringify(currentUser));
                 }
                 
-                // Online statusni yangilash
                 await updateOnlineStatus(true);
-                
                 showChatPage();
-                
-                // Xabarlarni yuklash
                 loadMessages();
-                
-                // Foydalanuvchilar holatini yuklash
                 loadUsers();
             } else {
                 alert('Login yoki parol noto\'g\'ri!');
@@ -152,57 +117,37 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Logout funksiyasi
     logoutBtn.addEventListener('click', async function() {
-        // Online statusni yangilash
         await updateOnlineStatus(false);
-        
-        // Saqlangan ma'lumotlarni o'chirish
         localStorage.removeItem('messenger_token');
         localStorage.removeItem('messenger_user');
         
-        // Intervallarni to'xtatish
         if (messageCheckInterval) clearInterval(messageCheckInterval);
         if (userCheckInterval) clearInterval(userCheckInterval);
         
-        // Login sahifasiga qaytish
         showLoginPage();
-        
-        // Ma'lumotlarni tozalash
         currentUser = null;
         currentToken = null;
         otherUser = null;
         lastMessageId = 0;
         
-        // Xabarlar maydonini tozalash
         messagesContainer.innerHTML = '<div class="welcome-message"><h3>Xush kelibsiz!</h3><p>Xabarlar bu yerda ko\'rinadi...</p></div>';
-        
-        // Input maydonlarini tozalash
         document.getElementById('username').value = '';
         document.getElementById('password').value = '';
     });
     
-    // Xabarlarni yuklash
     async function loadMessages() {
         try {
             const response = await fetch('/api/messages');
             const messages = await response.json();
             
-            // Oxirgi xabarni topish
             const latestMessage = messages[messages.length - 1];
             if (latestMessage && latestMessage.id !== lastMessageId) {
                 lastMessageId = latestMessage.id;
-                
-                // Xabarlarni UI ga chiqarish
                 displayMessages(messages);
-                
-                // Oxirgi xabarga o'tish
                 scrollToBottom();
-                
-                // Barcha xabarlarni tekshirish va ko'rilgan deb belgilash
                 await checkAllMessages(messages);
             } else if (messages.length === 0 && lastMessageId !== 0) {
-                // Xabarlar bo'sh bo'lsa
                 displayMessages(messages);
                 lastMessageId = 0;
             }
@@ -211,42 +156,29 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Xabarlarni UI ga chiqarish
     function displayMessages(messages) {
-        // Welcome xabarini olib tashlash (agar xabarlar mavjud bo'lsa)
         if (messages.length > 0) {
             const welcomeMessage = messagesContainer.querySelector('.welcome-message');
-            if (welcomeMessage) {
-                welcomeMessage.remove();
-            }
+            if (welcomeMessage) welcomeMessage.remove();
         } else {
-            // Xabarlar bo'sh bo'lsa, welcome message qo'shish
             if (!messagesContainer.querySelector('.welcome-message')) {
                 messagesContainer.innerHTML = '<div class="welcome-message"><h3>Xush kelibsiz!</h3><p>Xabarlar bu yerda ko\'rinadi...</p></div>';
             }
             return;
         }
         
-        // Avvalgi xabarlarni tozalash
         messagesContainer.innerHTML = '';
-        
-        // Har bir xabarni chiqarish
-        messages.forEach(message => {
-            addMessageToUI(message);
-        });
+        messages.forEach(message => addMessageToUI(message));
     }
     
-    // Xabarni UI ga qo'shish
     function addMessageToUI(message) {
         const messageElement = document.createElement('div');
         messageElement.className = `message ${message.senderId === currentUser.id ? 'sent' : 'received'}`;
         messageElement.setAttribute('data-message-id', message.id);
         
-        // Vaqtni formatlash
         const messageTime = new Date(message.timestamp);
         const timeString = messageTime.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
         
-        // Ko'rilganlik holati
         let seenStatus = '';
         if (message.senderId === currentUser.id) {
             if (message.seen && message.seenAt) {
@@ -274,7 +206,6 @@ document.addEventListener('DOMContentLoaded', function() {
         messagesContainer.appendChild(messageElement);
     }
     
-    // Xabar yuborish
     sendBtn.addEventListener('click', sendMessage);
     
     messageInput.addEventListener('keypress', function(e) {
@@ -286,19 +217,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     async function sendMessage() {
         const content = messageInput.value.trim();
-        
         if (!content) return;
         
         try {
             const response = await fetch('/api/messages', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    token: currentToken,
-                    content: content
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: currentToken, content })
             });
             
             const data = await response.json();
@@ -306,11 +231,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 messageInput.value = '';
                 messageInput.focus();
-                // Xabar UI ga qo'shish
                 addMessageToUI(data.message);
                 scrollToBottom();
                 
-                // 2 soniyadan keyin seen qilish (boshqa foydalanuvchi o'qigan deb hisoblash)
+                // 2 soniyadan keyin seen qilish
                 setTimeout(async () => {
                     await markMessageAsSeen(data.message.id);
                 }, 2000);
@@ -321,27 +245,19 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Xabarni ko'rilgan deb belgilash
     async function markMessageAsSeen(messageId) {
         try {
             await fetch('/api/messages', {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    messageId: messageId, 
-                    token: currentToken 
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messageId, token: currentToken })
             });
         } catch (error) {
             console.error('Xabarni ko\'rilgan deb belgilash xatosi:', error);
         }
     }
     
-    // Barcha xabarlarni tekshirish
     async function checkAllMessages(messages) {
-        // Boshqa foydalanuvchining xabarlarini ko'rilgan deb belgilash
         const theirMessages = messages.filter(m => 
             m.senderId === otherUser.id && !m.seen
         );
@@ -351,7 +267,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Foydalanuvchilarni yuklash
     async function loadUsers() {
         try {
             const response = await fetch('/api/users');
@@ -365,9 +280,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Foydalanuvchi holatini yangilash
     function updateUserStatus(userId, online, lastSeen) {
-        // Boshqa foydalanuvchi
         if (otherUser && userId === otherUser.id) {
             if (online) {
                 otherUserStatus.textContent = `${otherUser.name} onlayn`;
@@ -380,55 +293,45 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        // O'zimning holatim
         if (currentUser && userId === currentUser.id) {
             currentUserAvatar.textContent = currentUser.name.charAt(0);
         }
     }
     
-    // Login sahifasini ko'rsatish
     function showLoginPage() {
         chatContainer.style.display = 'none';
         loginContainer.style.display = 'block';
         document.getElementById('username').focus();
     }
     
-    // Chat sahifasini ko'rsatish
     function showChatPage() {
         loginContainer.style.display = 'none';
         chatContainer.style.display = 'block';
         
-        // UI ni yangilash
         currentUserName.textContent = currentUser.name;
         currentUserAvatar.textContent = currentUser.name.charAt(0);
         currentUserAvatar.title = currentUser.name;
         
-        // Input maydonini yoqish
         messageInput.disabled = false;
         sendBtn.disabled = false;
         messageInput.focus();
         
-        // Interval orqali xabarlarni tekshirish
         if (messageCheckInterval) clearInterval(messageCheckInterval);
         messageCheckInterval = setInterval(loadMessages, 2000);
         
-        // Interval orqali foydalanuvchilarni tekshirish
         if (userCheckInterval) clearInterval(userCheckInterval);
         userCheckInterval = setInterval(loadUsers, 3000);
     }
     
-    // Pastga o'tish
     function scrollToBottom() {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
     
-    // Enter tugmasi bilan login
     document.getElementById('password').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             loginBtn.click();
         }
     });
     
-    // Sayt yuklanganda username maydoniga fokus
     document.getElementById('username').focus();
 });
