@@ -1,0 +1,59 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "nafisa_177",
+      "password": "nafisa2010",
+      "name": "Nafisa",
+      "online": true,
+      "lastSeen": "2025-12-01T10:04:39.372Z"
+    },
+    {
+      "id": 2,
+      "username": "jahongir_177",
+      "password": "jahongir2010",
+      "name": "Jahongir",
+      "online": true,
+      "lastSeen": "2025-12-01T10:06:04.816Z"
+    }
+  ],
+  "messages": [
+    {
+      "id": 1764583418263,
+      "senderId": 1,
+      "senderName": "Nafisa",
+      "content": "Salom!",
+      "timestamp": "2025-12-01T10:03:38.263Z",
+      "seen": true,
+      "seenAt": "2025-12-01T10:04:33.638Z"
+    },
+    {
+      "id": 1764583492769,
+      "senderId": 2,
+      "senderName": "Jahongir",
+      "content": "Assalomu alaykum",
+      "timestamp": "2025-12-01T10:04:52.769Z",
+      "seen": true,
+      "seenAt": "2025-12-01T10:04:52.783Z"
+    },
+    {
+      "id": 1764583503260,
+      "senderId": 2,
+      "senderName": "Jahongir",
+      "content": "exx, xayr (",
+      "timestamp": "2025-12-01T10:05:03.260Z",
+      "seen": true,
+      "seenAt": "2025-12-01T10:05:04.875Z"
+    }
+  ],
+  "sessions": {
+    "ayqv6lbkkwamimzel5k": {
+      "userId": 1,
+      "timestamp": 1764583415192
+    },
+    "amkd7pf0a6kmimzfu7e": {
+      "userId": 2,
+      "timestamp": 1764583473578
+    }
+  }
+}
