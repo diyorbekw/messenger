@@ -1,4 +1,4 @@
-// Memory da saqlaymiz (file system ishlatmaymiz)
+// Memory storage (Vercel'da faqat memory ishlatamiz)
 let messages = [];
 let onlineStatus = { 1: false, 2: false };
 let lastSeen = { 
@@ -18,19 +18,40 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
-  // Handle OPTIONS
+  // Handle OPTIONS preflight
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
-  // Path'ni aniqlash
-  const path = req.url;
+  const { pathname } = new URL(req.url || '', `http://${req.headers.host}`);
   
-  // Login
-  if (path === '/api/login' && req.method === 'POST') {
+  // Parse body for POST/PUT requests
+  let body = {};
+  if (req.method === 'POST' || req.method === 'PUT') {
     try {
-      const body = JSON.parse(req.body || '{}');
+      let data = '';
+      req.on('data', chunk => {
+        data += chunk;
+      });
+      
+      req.on('end', () => {
+        if (data) {
+          body = JSON.parse(data);
+        }
+        handleRequest();
+      });
+    } catch (error) {
+      res.status(400).json({ success: false, message: 'Invalid JSON' });
+      return;
+    }
+  } else {
+    handleRequest();
+  }
+
+  function handleRequest() {
+    // Login endpoint
+    if (pathname === '/api/login' && req.method === 'POST') {
       const { username, password } = body;
       
       const user = users.find(u => u.username === username && u.password === password);
@@ -41,7 +62,8 @@ module.exports = async (req, res) => {
         
         const token = `${user.id}_${Date.now()}`;
         
-        res.status(200).json({
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
           success: true,
           token,
           user: {
@@ -49,23 +71,20 @@ module.exports = async (req, res) => {
             username: user.username,
             name: user.name
           }
-        });
+        }));
       } else {
-        res.status(401).json({ success: false, message: 'Login yoki parol noto\'g\'ri' });
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Login yoki parol noto\'g\'ri' }));
       }
-    } catch (error) {
-      res.status(400).json({ success: false, message: 'Invalid request' });
     }
-  }
-  
-  // Verify
-  else if (path === '/api/verify' && req.method === 'POST') {
-    try {
-      const body = JSON.parse(req.body || '{}');
+    
+    // Verify token
+    else if (pathname === '/api/verify' && req.method === 'POST') {
       const { token } = body;
       
       if (!token) {
-        return res.status(200).json({ valid: false });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ valid: false }));
       }
       
       const userId = parseInt(token.split('_')[0]);
@@ -77,45 +96,46 @@ module.exports = async (req, res) => {
           onlineStatus[userId] = true;
           lastSeen[userId] = new Date().toISOString();
           
-          res.status(200).json({ 
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
             valid: true, 
             user: {
               id: user.id,
               username: user.username,
               name: user.name
             }
-          });
+          }));
         } else {
-          res.status(200).json({ valid: false });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ valid: false }));
         }
       } else {
-        res.status(200).json({ valid: false });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ valid: false }));
       }
-    } catch (error) {
-      res.status(200).json({ valid: false });
     }
-  }
-  
-  // Get messages
-  else if (path === '/api/messages' && req.method === 'GET') {
-    res.status(200).json(messages);
-  }
-  
-  // Send message
-  else if (path === '/api/messages' && req.method === 'POST') {
-    try {
-      const body = JSON.parse(req.body || '{}');
+    
+    // Get messages
+    else if (pathname === '/api/messages' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(messages));
+    }
+    
+    // Send message
+    else if (pathname === '/api/messages' && req.method === 'POST') {
       const { token, content } = body;
       
       if (!token || !content) {
-        return res.status(400).json({ success: false, message: 'Token va content kerak' });
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: false, message: 'Token va content kerak' }));
       }
       
       const userId = parseInt(token.split('_')[0]);
       const user = users.find(u => u.id === userId);
       
       if (!user) {
-        return res.status(401).json({ success: false, message: 'Avtorizatsiya xatosi' });
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: false, message: 'Avtorizatsiya xatosi' }));
       }
       
       const message = {
@@ -134,20 +154,17 @@ module.exports = async (req, res) => {
         messages = messages.slice(-100);
       }
       
-      res.status(200).json({ success: true, message });
-    } catch (error) {
-      res.status(400).json({ success: false, message: 'Invalid request' });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message }));
     }
-  }
-  
-  // Mark as seen
-  else if (path === '/api/messages' && req.method === 'PUT') {
-    try {
-      const body = JSON.parse(req.body || '{}');
+    
+    // Mark message as seen
+    else if (pathname === '/api/messages' && req.method === 'PUT') {
       const { messageId, token } = body;
       
       if (!messageId || !token) {
-        return res.status(400).json({ success: false, message: 'messageId va token kerak' });
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: false, message: 'messageId va token kerak' }));
       }
       
       const messageIndex = messages.findIndex(m => m.id === messageId);
@@ -155,49 +172,48 @@ module.exports = async (req, res) => {
         messages[messageIndex].seen = true;
         messages[messageIndex].seenAt = new Date().toISOString();
         
-        res.status(200).json({ success: true });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
       } else {
-        res.status(404).json({ success: false, message: 'Xabar topilmadi' });
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Xabar topilmadi' }));
       }
-    } catch (error) {
-      res.status(400).json({ success: false, message: 'Invalid request' });
     }
-  }
-  
-  // Get users
-  else if (path === '/api/users' && req.method === 'GET') {
-    const userList = users.map(user => ({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      online: onlineStatus[user.id],
-      lastSeen: lastSeen[user.id]
-    }));
     
-    res.status(200).json(userList);
-  }
-  
-  // Update user status
-  else if (path === '/api/users' && req.method === 'POST') {
-    try {
-      const body = JSON.parse(req.body || '{}');
+    // Get users
+    else if (pathname === '/api/users' && req.method === 'GET') {
+      const userList = users.map(user => ({
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        online: onlineStatus[user.id],
+        lastSeen: lastSeen[user.id]
+      }));
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(userList));
+    }
+    
+    // Update user status
+    else if (pathname === '/api/users' && req.method === 'POST') {
       const { userId, online } = body;
       
       if (userId && (online === true || online === false)) {
         onlineStatus[userId] = online;
         lastSeen[userId] = new Date().toISOString();
         
-        res.status(200).json({ success: true });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
       } else {
-        res.status(400).json({ success: false, message: 'userId va online kerak' });
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'userId va online kerak' }));
       }
-    } catch (error) {
-      res.status(400).json({ success: false, message: 'Invalid request' });
     }
-  }
-  
-  // Not found
-  else {
-    res.status(404).json({ success: false, message: 'Endpoint topilmadi' });
+    
+    // Not found
+    else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, message: 'Endpoint topilmadi' }));
+    }
   }
 };
