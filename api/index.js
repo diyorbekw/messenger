@@ -1,4 +1,4 @@
-// Memory storage (Vercel'da faqat memory ishlatamiz)
+// Memory storage - Vercel'da faqat memory ishlatamiz
 let messages = [];
 let onlineStatus = { 1: false, 2: false };
 let lastSeen = { 
@@ -24,196 +24,166 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const { pathname } = new URL(req.url || '', `http://${req.headers.host}`);
-  
-  // Parse body for POST/PUT requests
+  const url = req.url || '';
   let body = {};
+
+  // Parse body for POST/PUT requests
   if (req.method === 'POST' || req.method === 'PUT') {
     try {
-      let data = '';
-      req.on('data', chunk => {
-        data += chunk;
-      });
-      
-      req.on('end', () => {
-        if (data) {
-          body = JSON.parse(data);
-        }
-        handleRequest();
-      });
+      if (req.body) {
+        // Vercel'da body JSON formatida keladi
+        body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      }
     } catch (error) {
-      res.status(400).json({ success: false, message: 'Invalid JSON' });
-      return;
+      return res.status(400).json({ success: false, message: 'Invalid JSON' });
     }
-  } else {
-    handleRequest();
   }
 
-  function handleRequest() {
-    // Login endpoint
-    if (pathname === '/api/login' && req.method === 'POST') {
-      const { username, password } = body;
+  // Login endpoint
+  if (url === '/api/login' && req.method === 'POST') {
+    const { username, password } = body;
+    
+    const user = users.find(u => u.username === username && u.password === password);
+    
+    if (user) {
+      onlineStatus[user.id] = true;
+      lastSeen[user.id] = new Date().toISOString();
       
-      const user = users.find(u => u.username === username && u.password === password);
+      const token = `${user.id}_${Date.now()}`;
+      
+      return res.status(200).json({
+        success: true,
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          name: user.name
+        }
+      });
+    } else {
+      return res.status(401).json({ success: false, message: 'Login yoki parol noto\'g\'ri' });
+    }
+  }
+  
+  // Verify token
+  else if (url === '/api/verify' && req.method === 'POST') {
+    const { token } = body;
+    
+    if (!token) {
+      return res.status(200).json({ valid: false });
+    }
+    
+    const userId = parseInt(token.split('_')[0]);
+    
+    if ([1, 2].includes(userId)) {
+      const user = users.find(u => u.id === userId);
       
       if (user) {
-        onlineStatus[user.id] = true;
-        lastSeen[user.id] = new Date().toISOString();
+        onlineStatus[userId] = true;
+        lastSeen[userId] = new Date().toISOString();
         
-        const token = `${user.id}_${Date.now()}`;
-        
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          success: true,
-          token,
+        return res.status(200).json({ 
+          valid: true, 
           user: {
             id: user.id,
             username: user.username,
             name: user.name
           }
-        }));
-      } else {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: 'Login yoki parol noto\'g\'ri' }));
+        });
       }
     }
     
-    // Verify token
-    else if (pathname === '/api/verify' && req.method === 'POST') {
-      const { token } = body;
-      
-      if (!token) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ valid: false }));
-      }
-      
-      const userId = parseInt(token.split('_')[0]);
-      
-      if ([1, 2].includes(userId)) {
-        const user = users.find(u => u.id === userId);
-        
-        if (user) {
-          onlineStatus[userId] = true;
-          lastSeen[userId] = new Date().toISOString();
-          
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ 
-            valid: true, 
-            user: {
-              id: user.id,
-              username: user.username,
-              name: user.name
-            }
-          }));
-        } else {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ valid: false }));
-        }
-      } else {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ valid: false }));
-      }
+    return res.status(200).json({ valid: false });
+  }
+  
+  // Get messages
+  else if (url === '/api/messages' && req.method === 'GET') {
+    return res.status(200).json(messages);
+  }
+  
+  // Send message
+  else if (url === '/api/messages' && req.method === 'POST') {
+    const { token, content } = body;
+    
+    if (!token || !content) {
+      return res.status(400).json({ success: false, message: 'Token va content kerak' });
     }
     
-    // Get messages
-    else if (pathname === '/api/messages' && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(messages));
+    const userId = parseInt(token.split('_')[0]);
+    const user = users.find(u => u.id === userId);
+    
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Avtorizatsiya xatosi' });
     }
     
-    // Send message
-    else if (pathname === '/api/messages' && req.method === 'POST') {
-      const { token, content } = body;
-      
-      if (!token || !content) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ success: false, message: 'Token va content kerak' }));
-      }
-      
-      const userId = parseInt(token.split('_')[0]);
-      const user = users.find(u => u.id === userId);
-      
-      if (!user) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ success: false, message: 'Avtorizatsiya xatosi' }));
-      }
-      
-      const message = {
-        id: Date.now(),
-        senderId: userId,
-        senderName: user.name,
-        content,
-        timestamp: new Date().toISOString(),
-        seen: false
-      };
-      
-      messages.push(message);
-      
-      // Faqat oxirgi 100 ta xabarni saqlash
-      if (messages.length > 100) {
-        messages = messages.slice(-100);
-      }
-      
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, message }));
+    const message = {
+      id: Date.now(),
+      senderId: userId,
+      senderName: user.name,
+      content,
+      timestamp: new Date().toISOString(),
+      seen: false,
+      seenAt: null
+    };
+    
+    messages.push(message);
+    
+    // Faqat oxirgi 100 ta xabarni saqlash
+    if (messages.length > 100) {
+      messages = messages.slice(-100);
     }
     
-    // Mark message as seen
-    else if (pathname === '/api/messages' && req.method === 'PUT') {
-      const { messageId, token } = body;
-      
-      if (!messageId || !token) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ success: false, message: 'messageId va token kerak' }));
-      }
-      
-      const messageIndex = messages.findIndex(m => m.id === messageId);
-      if (messageIndex !== -1) {
-        messages[messageIndex].seen = true;
-        messages[messageIndex].seenAt = new Date().toISOString();
-        
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true }));
-      } else {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: 'Xabar topilmadi' }));
-      }
+    return res.status(200).json({ success: true, message });
+  }
+  
+  // Mark message as seen
+  else if (url === '/api/messages' && req.method === 'PUT') {
+    const { messageId, token } = body;
+    
+    if (!messageId || !token) {
+      return res.status(400).json({ success: false, message: 'messageId va token kerak' });
     }
     
-    // Get users
-    else if (pathname === '/api/users' && req.method === 'GET') {
-      const userList = users.map(user => ({
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        online: onlineStatus[user.id],
-        lastSeen: lastSeen[user.id]
-      }));
+    const messageIndex = messages.findIndex(m => m.id === messageId);
+    if (messageIndex !== -1) {
+      messages[messageIndex].seen = true;
+      messages[messageIndex].seenAt = new Date().toISOString();
       
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(userList));
+      return res.status(200).json({ success: true });
+    } else {
+      return res.status(404).json({ success: false, message: 'Xabar topilmadi' });
     }
+  }
+  
+  // Get users
+  else if (url === '/api/users' && req.method === 'GET') {
+    const userList = users.map(user => ({
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      online: onlineStatus[user.id],
+      lastSeen: lastSeen[user.id]
+    }));
     
-    // Update user status
-    else if (pathname === '/api/users' && req.method === 'POST') {
-      const { userId, online } = body;
+    return res.status(200).json(userList);
+  }
+  
+  // Update user status
+  else if (url === '/api/users' && req.method === 'POST') {
+    const { userId, online } = body;
+    
+    if (userId && (online === true || online === false)) {
+      onlineStatus[userId] = online;
+      lastSeen[userId] = new Date().toISOString();
       
-      if (userId && (online === true || online === false)) {
-        onlineStatus[userId] = online;
-        lastSeen[userId] = new Date().toISOString();
-        
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true }));
-      } else {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: 'userId va online kerak' }));
-      }
+      return res.status(200).json({ success: true });
+    } else {
+      return res.status(400).json({ success: false, message: 'userId va online kerak' });
     }
-    
-    // Not found
-    else {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, message: 'Endpoint topilmadi' }));
-    }
+  }
+  
+  // Not found
+  else {
+    return res.status(404).json({ success: false, message: 'Endpoint topilmadi' });
   }
 };

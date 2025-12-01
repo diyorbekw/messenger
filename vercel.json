@@ -8,7 +8,7 @@
     { "source": "/api/(.*)", "destination": "/api/index.js" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
-  "buildCommand": "echo 'Building...'",
+  "buildCommand": "",
   "outputDirectory": ".",
-  "installCommand": "echo 'No installation needed'"
+  "installCommand": ""
 }

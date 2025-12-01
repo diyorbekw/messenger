@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "description": "Ikki kishilik messenger",
   "scripts": {
-    "dev": "npx serve public"
+    "dev": "echo 'No dev server needed'"
   },
-  "dependencies": {},
   "engines": {
-    "node": "18.x"
+    "node": "24.x"
   }
 }
