@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let otherUser = null;
     let messageCheckInterval = null;
     let userCheckInterval = null;
+    let pingInterval = null;
     let lastMessageId = 0;
     
     // Sahifa yuklanganda avtomatik login
@@ -67,8 +68,8 @@ document.addEventListener('DOMContentLoaded', function() {
             { id: 2, name: 'Jahongir' } : 
             { id: 1, name: 'Nafisa' };
         
-        // Online statusni yangilash
-        await updateOnlineStatus(true);
+        // Clientni register qilish (WebSocket simulation)
+        await registerClient();
         
         showChatPage();
         
@@ -77,23 +78,41 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Foydalanuvchilar holatini yuklash
         loadUsers();
+        
+        // Intervallarni boshlash
+        startIntervals();
+        
+        // Barcha xabarlarni ko'rilgan deb belgilash
+        await markAllMessagesAsSeen();
     }
     
-    // Online statusni yangilash
-    async function updateOnlineStatus(online) {
+    // Clientni register qilish
+    async function registerClient() {
         try {
-            await fetch('/api/users', {
+            await fetch('/api/register-client', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ 
-                    userId: currentUser.id, 
-                    online: online 
-                })
+                body: JSON.stringify({ userId: currentUser.id })
             });
         } catch (error) {
-            console.error('Online status yangilashda xato:', error);
+            console.error('Client register xatosi:', error);
+        }
+    }
+    
+    // Ping yuborish (connectionni saqlash)
+    async function sendPing() {
+        try {
+            await fetch('/api/ping', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ userId: currentUser.id })
+            });
+        } catch (error) {
+            console.error('Ping xatosi:', error);
         }
     }
     
@@ -133,8 +152,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     localStorage.setItem('messenger_user', JSON.stringify(currentUser));
                 }
                 
-                // Online statusni yangilash
-                await updateOnlineStatus(true);
+                // Clientni register qilish
+                await registerClient();
                 
                 showChatPage();
                 
@@ -143,6 +162,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Foydalanuvchilar holatini yuklash
                 loadUsers();
+                
+                // Intervallarni boshlash
+                startIntervals();
+                
+                // Barcha xabarlarni ko'rilgan deb belgilash
+                await markAllMessagesAsSeen();
             } else {
                 alert('Login yoki parol noto\'g\'ri!');
             }
@@ -154,16 +179,24 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Logout funksiyasi
     logoutBtn.addEventListener('click', async function() {
-        // Online statusni yangilash
-        await updateOnlineStatus(false);
+        try {
+            await fetch('/api/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ token: currentToken })
+            });
+        } catch (error) {
+            console.error('Logout xatosi:', error);
+        }
         
         // Saqlangan ma'lumotlarni o'chirish
         localStorage.removeItem('messenger_token');
         localStorage.removeItem('messenger_user');
         
         // Intervallarni to'xtatish
-        if (messageCheckInterval) clearInterval(messageCheckInterval);
-        if (userCheckInterval) clearInterval(userCheckInterval);
+        stopIntervals();
         
         // Login sahifasiga qaytish
         showLoginPage();
@@ -198,13 +231,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Oxirgi xabarga o'tish
                 scrollToBottom();
-                
-                // Boshqa foydalanuvchining xabarlarini ko'rilgan deb belgilash
-                await markOtherUserMessagesAsSeen(messages);
-            } else if (messages.length === 0 && lastMessageId !== 0) {
-                // Xabarlar bo'sh bo'lsa
-                displayMessages(messages);
-                lastMessageId = 0;
             }
         } catch (error) {
             console.error('Xabarlarni yuklash xatosi:', error);
@@ -306,14 +332,13 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.success) {
                 messageInput.value = '';
                 messageInput.focus();
+                
                 // Xabar UI ga qo'shish
                 addMessageToUI(data.message);
                 scrollToBottom();
                 
-                // 2 soniyadan keyin seen qilish (boshqa foydalanuvchi o'qigan deb hisoblash)
-                setTimeout(async () => {
-                    await markMessageAsSeen(data.message.id);
-                }, 2000);
+                // Boshqa foydalanuvchi xabarni o'qiganda, seen bo'ladi
+                // (Bu polling orqali tekshiriladi)
             }
         } catch (error) {
             console.error('Xabar yuborish xatosi:', error);
@@ -324,8 +349,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Xabarni ko'rilgan deb belgilash
     async function markMessageAsSeen(messageId) {
         try {
-            await fetch('/api/messages', {
-                method: 'PUT',
+            await fetch('/api/messages/seen', {
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
@@ -339,14 +364,20 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Boshqa foydalanuvchining xabarlarini ko'rilgan deb belgilash
-    async function markOtherUserMessagesAsSeen(messages) {
-        const otherUserMessages = messages.filter(m => 
-            m.senderId === otherUser.id && !m.seen
-        );
-        
-        for (const message of otherUserMessages) {
-            await markMessageAsSeen(message.id);
+    // Barcha xabarlarni ko'rilgan deb belgilash
+    async function markAllMessagesAsSeen() {
+        try {
+            await fetch('/api/messages/mark-all-seen', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    token: currentToken 
+                })
+            });
+        } catch (error) {
+            console.error('Barcha xabarlarni ko\'rilgan deb belgilash xatosi:', error);
         }
     }
     
@@ -385,6 +416,31 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Intervallarni boshlash
+    function startIntervals() {
+        stopIntervals(); // Avvalgi intervallarni tozalash
+        
+        // Xabarlarni tekshirish
+        messageCheckInterval = setInterval(loadMessages, 1000);
+        
+        // Foydalanuvchilarni tekshirish
+        userCheckInterval = setInterval(loadUsers, 3000);
+        
+        // Ping yuborish (connectionni saqlash)
+        pingInterval = setInterval(sendPing, 15000);
+    }
+    
+    // Intervallarni to'xtatish
+    function stopIntervals() {
+        if (messageCheckInterval) clearInterval(messageCheckInterval);
+        if (userCheckInterval) clearInterval(userCheckInterval);
+        if (pingInterval) clearInterval(pingInterval);
+        
+        messageCheckInterval = null;
+        userCheckInterval = null;
+        pingInterval = null;
+    }
+    
     // Login sahifasini ko'rsatish
     function showLoginPage() {
         chatContainer.style.display = 'none';
@@ -406,14 +462,6 @@ document.addEventListener('DOMContentLoaded', function() {
         messageInput.disabled = false;
         sendBtn.disabled = false;
         messageInput.focus();
-        
-        // Interval orqali xabarlarni tekshirish
-        if (messageCheckInterval) clearInterval(messageCheckInterval);
-        messageCheckInterval = setInterval(loadMessages, 2000);
-        
-        // Interval orqali foydalanuvchilarni tekshirish
-        if (userCheckInterval) clearInterval(userCheckInterval);
-        userCheckInterval = setInterval(loadUsers, 3000);
     }
     
     // Pastga o'tish

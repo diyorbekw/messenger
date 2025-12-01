@@ -6,8 +6,5 @@
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.js" }
-  ],
-  "buildCommand": "",
-  "outputDirectory": ".",
-  "installCommand": ""
+  ]
 }

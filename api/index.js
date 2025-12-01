@@ -1,15 +1,29 @@
-// Memory storage - Vercel'da faqat memory ishlatamiz
-let messages = [];
-let onlineStatus = { 1: false, 2: false };
-let lastSeen = { 
-  1: new Date().toISOString(), 
-  2: new Date().toISOString() 
+// Memory storage (old server.js logic'iga o'xshash)
+let db = {
+  users: [
+    {
+      id: 1,
+      username: "nafisa_177",
+      password: "nafisa2010",
+      name: "Nafisa",
+      online: false,
+      lastSeen: new Date().toISOString()
+    },
+    {
+      id: 2,
+      username: "jahongir_177",
+      password: "jahongir2010",
+      name: "Jahongir",
+      online: false,
+      lastSeen: new Date().toISOString()
+    }
+  ],
+  messages: [],
+  sessions: {}
 };
 
-const users = [
-  { id: 1, username: "nafisa_177", password: "nafisa2010", name: "Nafisa" },
-  { id: 2, username: "jahongir_177", password: "jahongir2010", name: "Jahongir" }
-];
+// WebSocket klientlarini simulatsiya qilish
+const clients = new Map();
 
 module.exports = async (req, res) => {
   // CORS headers
@@ -18,7 +32,6 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
-  // Handle OPTIONS preflight
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
@@ -27,7 +40,7 @@ module.exports = async (req, res) => {
   const url = req.url || '';
   let body = {};
 
-  // Parse body for POST/PUT requests
+  // Parse body
   if (req.method === 'POST' || req.method === 'PUT') {
     try {
       if (req.body) {
@@ -38,17 +51,30 @@ module.exports = async (req, res) => {
     }
   }
 
-  // Login endpoint
+  // Login
   if (url === '/api/login' && req.method === 'POST') {
     const { username, password } = body;
     
-    const user = users.find(u => u.username === username && u.password === password);
+    const user = db.users.find(u => u.username === username && u.password === password);
     
     if (user) {
-      onlineStatus[user.id] = true;
-      lastSeen[user.id] = new Date().toISOString();
+      // Eski sessionlarni tozalash
+      Object.keys(db.sessions).forEach(token => {
+        if (db.sessions[token].userId === user.id) {
+          delete db.sessions[token];
+        }
+      });
       
-      const token = `${user.id}_${Date.now()}`;
+      // Yangi token
+      const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
+      db.sessions[token] = { userId: user.id, timestamp: Date.now() };
+      
+      // User online qilish
+      user.online = true;
+      user.lastSeen = new Date().toISOString();
+      
+      // Simulate WebSocket broadcast
+      broadcast({ type: 'user_status', userId: user.id, online: true, lastSeen: user.lastSeen });
       
       return res.status(200).json({
         success: true,
@@ -64,22 +90,17 @@ module.exports = async (req, res) => {
     }
   }
   
-  // Verify token
+  // Verify
   else if (url === '/api/verify' && req.method === 'POST') {
     const { token } = body;
     
-    if (!token) {
-      return res.status(200).json({ valid: false });
-    }
-    
-    const userId = parseInt(token.split('_')[0]);
-    
-    if ([1, 2].includes(userId)) {
-      const user = users.find(u => u.id === userId);
+    if (db.sessions[token]) {
+      const userId = db.sessions[token].userId;
+      const user = db.users.find(u => u.id === userId);
       
       if (user) {
-        onlineStatus[userId] = true;
-        lastSeen[userId] = new Date().toISOString();
+        user.online = true;
+        user.lastSeen = new Date().toISOString();
         
         return res.status(200).json({ 
           valid: true, 
@@ -95,58 +116,82 @@ module.exports = async (req, res) => {
     return res.status(200).json({ valid: false });
   }
   
+  // Logout
+  else if (url === '/api/logout' && req.method === 'POST') {
+    const { token } = body;
+    
+    if (db.sessions[token]) {
+      const userId = db.sessions[token].userId;
+      delete db.sessions[token];
+      
+      const user = db.users.find(u => u.id === userId);
+      if (user) {
+        user.online = false;
+        user.lastSeen = new Date().toISOString();
+      }
+      
+      // Simulate WebSocket broadcast
+      broadcast({ type: 'user_status', userId, online: false, lastSeen: user.lastSeen });
+      
+      return res.status(200).json({ success: true });
+    } else {
+      return res.status(400).json({ success: false, message: 'Token topilmadi' });
+    }
+  }
+  
   // Get messages
   else if (url === '/api/messages' && req.method === 'GET') {
-    return res.status(200).json(messages);
+    return res.status(200).json(db.messages);
   }
   
   // Send message
   else if (url === '/api/messages' && req.method === 'POST') {
     const { token, content } = body;
     
-    if (!token || !content) {
-      return res.status(400).json({ success: false, message: 'Token va content kerak' });
-    }
-    
-    const userId = parseInt(token.split('_')[0]);
-    const user = users.find(u => u.id === userId);
-    
-    if (!user) {
+    if (!db.sessions[token]) {
       return res.status(401).json({ success: false, message: 'Avtorizatsiya xatosi' });
     }
     
+    const senderId = db.sessions[token].userId;
+    const sender = db.users.find(u => u.id === senderId);
+    
     const message = {
       id: Date.now(),
-      senderId: userId,
-      senderName: user.name,
+      senderId,
+      senderName: sender.name,
       content,
       timestamp: new Date().toISOString(),
       seen: false,
       seenAt: null
     };
     
-    messages.push(message);
+    db.messages.push(message);
     
-    // Faqat oxirgi 100 ta xabarni saqlash
-    if (messages.length > 100) {
-      messages = messages.slice(-100);
-    }
+    // Simulate WebSocket broadcast
+    broadcast({ type: 'new_message', message });
     
     return res.status(200).json({ success: true, message });
   }
   
   // Mark message as seen
-  else if (url === '/api/messages' && req.method === 'PUT') {
-    const { messageId, token } = body;
+  else if (url === '/api/messages/seen' && req.method === 'POST') {
+    const { token, messageId } = body;
     
-    if (!messageId || !token) {
-      return res.status(400).json({ success: false, message: 'messageId va token kerak' });
+    if (!db.sessions[token]) {
+      return res.status(401).json({ success: false, message: 'Avtorizatsiya xatosi' });
     }
     
-    const messageIndex = messages.findIndex(m => m.id === messageId);
+    const messageIndex = db.messages.findIndex(m => m.id === messageId);
     if (messageIndex !== -1) {
-      messages[messageIndex].seen = true;
-      messages[messageIndex].seenAt = new Date().toISOString();
+      db.messages[messageIndex].seen = true;
+      db.messages[messageIndex].seenAt = new Date().toISOString();
+      
+      // Simulate WebSocket broadcast
+      broadcast({ 
+        type: 'message_seen', 
+        messageId: messageId, 
+        seenAt: db.messages[messageIndex].seenAt 
+      });
       
       return res.status(200).json({ success: true });
     } else {
@@ -154,31 +199,90 @@ module.exports = async (req, res) => {
     }
   }
   
-  // Get users
-  else if (url === '/api/users' && req.method === 'GET') {
-    const userList = users.map(user => ({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-      online: onlineStatus[user.id],
-      lastSeen: lastSeen[user.id]
-    }));
+  // Mark all messages as seen
+  else if (url === '/api/messages/mark-all-seen' && req.method === 'POST') {
+    const { token } = body;
     
-    return res.status(200).json(userList);
+    if (!db.sessions[token]) {
+      return res.status(401).json({ success: false, message: 'Avtorizatsiya xatosi' });
+    }
+    
+    const userId = db.sessions[token].userId;
+    const otherUserId = userId === 1 ? 2 : 1;
+    
+    // Mark all messages from other user as seen
+    db.messages.forEach(message => {
+      if (message.senderId === otherUserId && !message.seen) {
+        message.seen = true;
+        message.seenAt = new Date().toISOString();
+        
+        // Simulate WebSocket broadcast for each message
+        broadcast({ 
+          type: 'message_seen', 
+          messageId: message.id, 
+          seenAt: message.seenAt 
+        });
+      }
+    });
+    
+    return res.status(200).json({ success: true });
   }
   
-  // Update user status
-  else if (url === '/api/users' && req.method === 'POST') {
-    const { userId, online } = body;
+  // Get users
+  else if (url === '/api/users' && req.method === 'GET') {
+    const users = db.users.map(u => ({
+      id: u.id,
+      username: u.username,
+      name: u.name,
+      online: u.online,
+      lastSeen: u.lastSeen
+    }));
+    return res.status(200).json(users);
+  }
+  
+  // Register client (WebSocket simulation)
+  else if (url === '/api/register-client' && req.method === 'POST') {
+    const { userId } = body;
     
-    if (userId && (online === true || online === false)) {
-      onlineStatus[userId] = online;
-      lastSeen[userId] = new Date().toISOString();
+    // Simulate WebSocket connection
+    clients.set(userId, { lastPing: Date.now() });
+    
+    // Update user online status
+    const user = db.users.find(u => u.id === userId);
+    if (user) {
+      user.online = true;
+      user.lastSeen = new Date().toISOString();
+    }
+    
+    // Broadcast status change
+    broadcast({ 
+      type: 'user_status', 
+      userId: userId, 
+      online: true,
+      lastSeen: user.lastSeen
+    });
+    
+    return res.status(200).json({ success: true });
+  }
+  
+  // Ping (keep connection alive)
+  else if (url === '/api/ping' && req.method === 'POST') {
+    const { userId } = body;
+    
+    if (clients.has(userId)) {
+      clients.set(userId, { lastPing: Date.now() });
+      
+      // Update user online status
+      const user = db.users.find(u => u.id === userId);
+      if (user) {
+        user.online = true;
+        user.lastSeen = new Date().toISOString();
+      }
       
       return res.status(200).json({ success: true });
-    } else {
-      return res.status(400).json({ success: false, message: 'userId va online kerak' });
     }
+    
+    return res.status(400).json({ success: false, message: 'Client topilmadi' });
   }
   
   // Not found
@@ -186,3 +290,38 @@ module.exports = async (req, res) => {
     return res.status(404).json({ success: false, message: 'Endpoint topilmadi' });
   }
 };
+
+// Simulate WebSocket broadcast
+function broadcast(data) {
+  // Vercel'da WebSocket yo'q, shuning uchun polling orqali ishlaymiz
+  // Clientlar o'zlarini tekshirishlari kerak
+  // Bu faqat server tomonida log qilish uchun
+  console.log('Broadcast:', data.type);
+}
+
+// Cleanup inactive clients every minute
+setInterval(() => {
+  const now = Date.now();
+  const timeout = 30000; // 30 seconds
+  
+  clients.forEach((client, userId) => {
+    if (now - client.lastPing > timeout) {
+      clients.delete(userId);
+      
+      // Mark user as offline
+      const user = db.users.find(u => u.id === userId);
+      if (user) {
+        user.online = false;
+        user.lastSeen = new Date().toISOString();
+      }
+      
+      // Broadcast status change
+      broadcast({ 
+        type: 'user_status', 
+        userId: userId, 
+        online: false,
+        lastSeen: user.lastSeen
+      });
+    }
+  });
+}, 60000); // Check every minute
