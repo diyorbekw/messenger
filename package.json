@@ -1,9 +1,5 @@
 {
   "name": "messenger",
   "version": "1.0.0",
-  "description": "Ikki kishilik messenger",
-  "scripts": {
-    "start": "echo 'Vercel serverless'"
-  },
-  "dependencies": {}
+  "description": "Ikki kishilik messenger"
 }
