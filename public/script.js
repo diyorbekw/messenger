@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (savedToken && savedUser) {
             try {
                 // Tokenni tekshirish
-                const response = await fetch('/api/verify.js', {
+                const response = await fetch('/api/verify', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -64,8 +64,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Boshqa foydalanuvchini aniqlash
         otherUser = currentUser.id === 1 ? 
-            { id: 2, name: 'Jahongir', username: 'jahongir_177' } : 
-            { id: 1, name: 'Nafisa', username: 'nafisa_177' };
+            { id: 2, name: 'Jahongir' } : 
+            { id: 1, name: 'Nafisa' };
         
         // Online statusni yangilash
         await updateOnlineStatus(true);
@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Online statusni yangilash
     async function updateOnlineStatus(online) {
         try {
-            await fetch('/api/users.js', {
+            await fetch('/api/users', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         try {
-            const response = await fetch('/api/login.js', {
+            const response = await fetch('/api/login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -124,8 +124,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Boshqa foydalanuvchini aniqlash
                 otherUser = currentUser.id === 1 ? 
-                    { id: 2, name: 'Jahongir', username: 'jahongir_177' } : 
-                    { id: 1, name: 'Nafisa', username: 'nafisa_177' };
+                    { id: 2, name: 'Jahongir' } : 
+                    { id: 1, name: 'Nafisa' };
                 
                 // Eshatib qolish
                 if (rememberMe.checked) {
@@ -172,6 +172,7 @@ document.addEventListener('DOMContentLoaded', function() {
         currentUser = null;
         currentToken = null;
         otherUser = null;
+        lastMessageId = 0;
         
         // Xabarlar maydonini tozalash
         messagesContainer.innerHTML = '<div class="welcome-message"><h3>Xush kelibsiz!</h3><p>Xabarlar bu yerda ko\'rinadi...</p></div>';
@@ -184,7 +185,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Xabarlarni yuklash
     async function loadMessages() {
         try {
-            const response = await fetch('/api/messages.js');
+            const response = await fetch('/api/messages');
             const messages = await response.json();
             
             // Oxirgi xabarni topish
@@ -210,12 +211,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // UI dagi xabarlar sonini olish
-    function getMessageCountInUI() {
-        const messages = messagesContainer.querySelectorAll('.message:not(.welcome-message)');
-        return messages.length;
-    }
-    
     // Xabarlarni UI ga chiqarish
     function displayMessages(messages) {
         // Welcome xabarini olib tashlash (agar xabarlar mavjud bo'lsa)
@@ -232,9 +227,8 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // Avvalgi xabarlarni tozalash (faqat message class'li elementlarni)
-        const oldMessages = messagesContainer.querySelectorAll('.message:not(.welcome-message)');
-        oldMessages.forEach(msg => msg.remove());
+        // Avvalgi xabarlarni tozalash
+        messagesContainer.innerHTML = '';
         
         // Har bir xabarni chiqarish
         messages.forEach(message => {
@@ -244,10 +238,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Xabarni UI ga qo'shish
     function addMessageToUI(message) {
-        // Xabar allaqachon mavjud bo'lmasligi kerak
-        const existingMessage = document.querySelector(`[data-message-id="${message.id}"]`);
-        if (existingMessage) return;
-        
         const messageElement = document.createElement('div');
         messageElement.className = `message ${message.senderId === currentUser.id ? 'sent' : 'received'}`;
         messageElement.setAttribute('data-message-id', message.id);
@@ -259,7 +249,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Ko'rilganlik holati
         let seenStatus = '';
         if (message.senderId === currentUser.id) {
-            if (message.seen) {
+            if (message.seen && message.seenAt) {
                 const seenTime = new Date(message.seenAt);
                 const seenTimeString = seenTime.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
                 seenStatus = `<div class="message-status seen">
@@ -300,7 +290,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!content) return;
         
         try {
-            const response = await fetch('/api/messages.js', {
+            const response = await fetch('/api/messages', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -319,6 +309,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Xabar UI ga qo'shish
                 addMessageToUI(data.message);
                 scrollToBottom();
+                
+                // 2 soniyadan keyin seen qilish (boshqa foydalanuvchi o'qigan deb hisoblash)
+                setTimeout(async () => {
+                    await markMessageAsSeen(data.message.id);
+                }, 2000);
             }
         } catch (error) {
             console.error('Xabar yuborish xatosi:', error);
@@ -329,7 +324,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Xabarni ko'rilgan deb belgilash
     async function markMessageAsSeen(messageId) {
         try {
-            await fetch('/api/messages.js', {
+            await fetch('/api/messages', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json'
@@ -354,25 +349,12 @@ document.addEventListener('DOMContentLoaded', function() {
         for (const message of theirMessages) {
             await markMessageAsSeen(message.id);
         }
-        
-        // O'z xabarlarimni tekshirish
-        const myUnseenMessages = messages.filter(m => 
-            m.senderId === currentUser.id && !m.seen
-        );
-        
-        // Agar boshqa foydalanuvchi onlayn bo'lsa, barcha xabarlarni ko'rilgan deb belgilash
-        for (const message of myUnseenMessages) {
-            // 1 soniya kutib, keyin seen qilish (boshqa foydalanuvchi o'qigan deb hisoblash)
-            setTimeout(async () => {
-                await markMessageAsSeen(message.id);
-            }, 1000);
-        }
     }
     
     // Foydalanuvchilarni yuklash
     async function loadUsers() {
         try {
-            const response = await fetch('/api/users.js');
+            const response = await fetch('/api/users');
             const users = await response.json();
             
             users.forEach(user => {
@@ -397,6 +379,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 otherUserStatus.style.color = '#65676b';
             }
         }
+        
+        // O'zimning holatim
+        if (currentUser && userId === currentUser.id) {
+            currentUserAvatar.textContent = currentUser.name.charAt(0);
+        }
     }
     
     // Login sahifasini ko'rsatish
@@ -413,7 +400,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // UI ni yangilash
         currentUserName.textContent = currentUser.name;
-        currentUserAvatar.innerHTML = `<i class="fas fa-user"></i>`;
+        currentUserAvatar.textContent = currentUser.name.charAt(0);
         currentUserAvatar.title = currentUser.name;
         
         // Input maydonini yoqish
@@ -427,7 +414,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Interval orqali foydalanuvchilarni tekshirish
         if (userCheckInterval) clearInterval(userCheckInterval);
-        userCheckInterval = setInterval(loadUsers, 5000);
+        userCheckInterval = setInterval(loadUsers, 3000);
     }
     
     // Pastga o'tish

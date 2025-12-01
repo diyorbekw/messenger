@@ -1,14 +1,7 @@
-// Memory storage
+// Global storage
 let messages = [];
-let onlineStatus = {
-  1: false,
-  2: false
-};
 
-// Message seen status
-const seenStatus = {};
-
-export default function handler(req, res) {
+module.exports = function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -32,7 +25,13 @@ export default function handler(req, res) {
     }
     
     const userId = parseInt(token.split('_')[0]);
-    const user = getUserById(userId);
+    
+    // Foydalanuvchini topish
+    const users = [
+      { id: 1, username: "nafisa_177", name: "Nafisa" },
+      { id: 2, username: "jahongir_177", name: "Jahongir" }
+    ];
+    const user = users.find(u => u.id === userId);
     
     if (!user) {
       return res.status(401).json({ success: false, message: 'Avtorizatsiya xatosi' });
@@ -49,10 +48,10 @@ export default function handler(req, res) {
     
     messages.push(message);
     
-    // Xabarni ko'rilgan deb belgilash
-    setTimeout(() => {
-      seenStatus[message.id] = false;
-    }, 1000);
+    // Faqat oxirgi 100 ta xabarni saqlash
+    if (messages.length > 100) {
+      messages = messages.slice(-100);
+    }
     
     res.status(200).json({ success: true, message });
   } else if (req.method === 'PUT') {
@@ -67,7 +66,6 @@ export default function handler(req, res) {
     if (messageIndex !== -1) {
       messages[messageIndex].seen = true;
       messages[messageIndex].seenAt = new Date().toISOString();
-      seenStatus[messageId] = true;
       
       res.status(200).json({ success: true });
     } else {
@@ -76,12 +74,4 @@ export default function handler(req, res) {
   } else {
     res.status(405).json({ success: false, message: 'Method not allowed' });
   }
-}
-
-function getUserById(id) {
-  const users = [
-    { id: 1, username: "nafisa_177", name: "Nafisa" },
-    { id: 2, username: "jahongir_177", name: "Jahongir" }
-  ];
-  return users.find(u => u.id === id);
 }

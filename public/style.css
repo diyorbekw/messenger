@@ -2,7 +2,7 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 body {
@@ -15,7 +15,7 @@ body {
 
 .container {
     width: 100%;
-    max-width: 1000px;
+    max-width: 800px;
     height: 90vh;
     margin: 0 auto;
 }
@@ -104,6 +104,26 @@ body {
     background: #0073e6;
 }
 
+.login-info {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f5f6f7;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #65676b;
+}
+
+.login-info p {
+    margin: 5px 0;
+}
+
+.login-info code {
+    background: #e4e6eb;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
 /* Chat sahifasi */
 .chat-app {
     display: flex;
@@ -120,13 +140,12 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 20px;
-    height: 60px;
+    padding: 15px 20px;
     background: #0084ff;
     color: white;
 }
 
-.header-info {
+.chat-info {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -161,6 +180,7 @@ body {
     align-items: center;
     justify-content: center;
     font-size: 14px;
+    font-weight: bold;
 }
 
 .user-name {
@@ -209,6 +229,12 @@ body {
 .message {
     margin-bottom: 12px;
     max-width: 70%;
+    animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .message.sent {
@@ -348,7 +374,7 @@ body {
     }
     
     .chat-header {
-        padding: 0 15px;
+        padding: 15px;
     }
     
     .message {

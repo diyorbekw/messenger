@@ -13,18 +13,22 @@ const users = [
   }
 ];
 
-// Memory storage (Vercel'da database yo'q)
-let messages = [];
-let onlineStatus = {
-  1: false,
-  2: false
-};
-let lastSeen = {
-  1: null,
-  2: null
-};
+// Global storage (har bir function chaqirilganda yangilanadi)
+let onlineStatus = {};
+let lastSeen = {};
 
-export default function handler(req, res) {
+module.exports = function handler(req, res) {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
   if (req.method === 'POST') {
     const { username, password } = req.body;
     
